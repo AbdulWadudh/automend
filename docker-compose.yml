@@ -8,22 +8,19 @@
 #
 # Requires a `.env` at the repo root: `cp .env.example .env`.
 #
-# Telemetry: the apps export logs over OTLP to whatever collector
-# OTEL_EXPORTER_OTLP_ENDPOINT_FROM_CONTAINER names — normally the deployed SigNoz. Set
-# OTEL_LOGS_ENABLED=false to run without one; logs still go to stdout either way.
-# The host-gateway alias below is for the case where the collector is published on the host.
+# Telemetry: the apps export logs over OTLP to whatever OTEL_EXPORTER_OTLP_ENDPOINT names —
+# normally the deployed SigNoz. Set OTEL_LOGS_ENABLED=false to run without one; logs still go to
+# stdout either way.
 
 name: automend
 
 x-telemetry: &telemetry
   OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED}
-  # The *_FROM_CONTAINER variant, because `localhost` inside a container is not the host.
-  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT_FROM_CONTAINER}
+  # No *_FROM_CONTAINER variant: the collector is a remote URL, reachable identically from the
+  # host and from inside a container. Postgres and Redis do need the split — they are compose
+  # services, so `localhost` means something different in each place.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
   OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS}
-
-# Makes `host.docker.internal` resolve on Linux too, where it is not automatic.
-x-host-gateway: &host-gateway
-  - "host.docker.internal:host-gateway"
 
 services:
   postgres:
@@ -86,7 +83,6 @@ services:
       dockerfile: apps/api/Dockerfile
     command: ["bun", "run", "/app/packages/db/src/migrate.ts"]
     restart: "no"
-    extra_hosts: *host-gateway
     environment:
       <<: *telemetry
       NODE_ENV: ${NODE_ENV}
@@ -101,7 +97,6 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
-    extra_hosts: *host-gateway
     environment:
       <<: *telemetry
       NODE_ENV: ${NODE_ENV}
@@ -125,7 +120,6 @@ services:
       context: .
       dockerfile: apps/worker/Dockerfile
     restart: unless-stopped
-    extra_hosts: *host-gateway
     environment:
       <<: *telemetry
       NODE_ENV: ${NODE_ENV}
@@ -149,7 +143,6 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
-    extra_hosts: *host-gateway
     environment:
       <<: *telemetry
       NODE_ENV: ${NODE_ENV}

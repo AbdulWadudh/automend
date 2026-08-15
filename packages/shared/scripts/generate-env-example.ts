@@ -51,12 +51,7 @@ const sections: EnvSection[] = [
       [
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         telemetry.defaultEndpoint,
-        `Collector base URL for apps run on the host ("${telemetry.logsPath}" is appended). For a remote SigNoz, use its https URL.`,
-      ],
-      [
-        "OTEL_EXPORTER_OTLP_ENDPOINT_FROM_CONTAINER",
-        `http://${telemetry.dockerHostAlias}:${telemetry.otlpHttpPort}`,
-        "Same collector, as reachable from inside a container. Set both to the same value when the collector is remote.",
+        `Collector base URL ("${telemetry.logsPath}" is appended). Normally the deployed SigNoz.`,
       ],
       ["OTEL_EXPORTER_OTLP_HEADERS", ""],
       ["OTLP_HTTP_PORT", telemetry.otlpHttpPort],

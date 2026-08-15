@@ -1,3 +1,5 @@
+<img src="automend.webp" alt="Automend" width="120" />
+
 # Automend
 
 A self-hosted, AI-centric workflow automation platform — build flows visually (trigger → steps →

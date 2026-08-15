@@ -16,3 +16,4 @@ build/
 # Bun / tooling caches
 .bun/
 *.tsbuildinfo
+.claude/skills

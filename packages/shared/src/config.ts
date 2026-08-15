@@ -263,10 +263,11 @@ export const config = {
     logsPath: "/v1/logs",
     otlpHttpPort: OTLP_HTTP_PORT,
     otlpGrpcPort: OTLP_GRPC_PORT,
-    /** Fallback for a collector published on the host; deployments override it via env. */
+    /**
+     * Fallback only. Real deployments set OTEL_EXPORTER_OTLP_ENDPOINT to a remote collector, which
+     * is why there is no host-vs-container split for it: a remote URL resolves the same from both.
+     */
     defaultEndpoint: httpUrl(LOCAL_HOST, OTLP_HTTP_PORT),
-    /** Container-to-host escape hatch, so app containers can reach a host-published collector. */
-    dockerHostAlias: "host.docker.internal",
     export: {
       /** Batch rather than per-record, so a log line never blocks a request. */
       maxQueueSize: 2_048,

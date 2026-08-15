@@ -10,3 +10,7 @@ node_modules
 *.log
 README.md
 docker-compose.yml
+# Repo-level branding, used by the README only. The app's own copies live in apps/web/public.
+automend.webp
+deploy/
+./claude
