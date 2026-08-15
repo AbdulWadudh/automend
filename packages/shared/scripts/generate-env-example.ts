@@ -31,10 +31,17 @@ const sections: EnvSection[] = [
     title: "Local development stack (docker-compose only)",
     note: "Throwaway local credentials, not secrets. Compose builds its own in-network URLs from these.",
     entries: [
+      ["POSTGRES_IMAGE", localDev.postgres.image, "Keep the major version in step with production."],
       ["POSTGRES_USER", localDev.postgres.user],
       ["POSTGRES_PASSWORD", localDev.postgres.password],
       ["POSTGRES_DB", localDev.postgres.database],
       ["POSTGRES_PORT", localDev.postgres.containerPort],
+      [
+        "POSTGRES_DATA_PATH",
+        localDev.postgres.dataPath,
+        "Postgres 18+ declares the parent dir as its volume, not PGDATA itself.",
+      ],
+      ["REDIS_IMAGE", localDev.redis.image],
       ["REDIS_PORT", localDev.redis.containerPort],
     ],
   },

@@ -67,6 +67,23 @@ const LOCAL_POSTGRES_DATABASE = "automend";
 const LOCAL_POSTGRES_SERVICE = "postgres";
 const LOCAL_REDIS_SERVICE = "redis";
 
+/**
+ * Images for the local stack. Keep the Postgres major version in step with the deployed one —
+ * developing against a different major is how a migration passes locally and fails in production.
+ */
+const LOCAL_POSTGRES_IMAGE = "postgres:18-alpine";
+const LOCAL_REDIS_IMAGE = "docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1";
+
+/**
+ * Where the Postgres data volume mounts.
+ *
+ * Postgres 18 moved `PGDATA` to `/var/lib/postgresql/<major>/docker` and now declares the *parent*
+ * `/var/lib/postgresql` as its volume, so that is what must be mounted. Mounting the old
+ * `/var/lib/postgresql/data` against an 18 image silently gets you a container whose data lives
+ * outside the volume — it looks fine until the container is recreated and the database is empty.
+ */
+const LOCAL_POSTGRES_DATA_PATH = "/var/lib/postgresql";
+
 // ───────────────────────────── Derivations ─────────────────────────────
 
 function httpUrl(host: string, port: number): string {
@@ -342,12 +359,15 @@ export const config = {
   localDev: {
     host: LOCAL_HOST,
     postgres: {
+      image: LOCAL_POSTGRES_IMAGE,
       containerPort: POSTGRES_CONTAINER_PORT,
       user: LOCAL_POSTGRES_USER,
       password: LOCAL_POSTGRES_PASSWORD,
       database: LOCAL_POSTGRES_DATABASE,
+      dataPath: LOCAL_POSTGRES_DATA_PATH,
     },
     redis: {
+      image: LOCAL_REDIS_IMAGE,
       containerPort: REDIS_CONTAINER_PORT,
     },
     /**

@@ -35,6 +35,7 @@ should explain what git cannot:
 
 | Date | Entry | Type |
 |---|---|---|
+| 2026-08-15 | [Move the local stack to Postgres 18 and fix its volume mount](2026/08/2026-08-15-postgres-18.md) | chore |
 | 2026-08-15 | [Add a deployment preflight check and Coolify deployment notes](2026/08/2026-08-15-coolify-deployment-preflight.md) | feat |
 | 2026-08-15 | [Export logs from every service to SigNoz over OTLP](2026/08/2026-08-15-signoz-log-export.md) | feat |
 | 2026-08-15 | [Centralise all configuration into a single derived source](2026/08/2026-08-15-centralise-configuration.md) | refactor |

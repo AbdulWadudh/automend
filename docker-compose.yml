@@ -27,7 +27,7 @@ x-host-gateway: &host-gateway
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: ${POSTGRES_IMAGE}
     restart: unless-stopped
     # Told to listen on the configured port, so host and container agree even if it changes.
     command: ["postgres", "-p", "${POSTGRES_PORT}"]
@@ -38,7 +38,10 @@ services:
     ports:
       - "${POSTGRES_PORT}:${POSTGRES_PORT}"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # Postgres 18 moved PGDATA to /var/lib/postgresql/<major>/docker and declares the *parent*
+      # as its volume. Mounting the old .../data path against an 18 image leaves the database
+      # outside the volume — it works until the container is recreated, then the data is gone.
+      - postgres-data:${POSTGRES_DATA_PATH}
     healthcheck:
       # Single `$` on purpose: Compose substitutes these from .env before Docker ever sees them,
       # so the values match the ones the server was started with.
@@ -50,7 +53,7 @@ services:
   # Named `redis` because that is the interface every app codes against. The image behind it is
   # DragonflyDB, which is Redis-wire-compatible — swapping it for stock Redis needs no code change.
   redis:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1
+    image: ${REDIS_IMAGE}
     restart: unless-stopped
     # Dragonfly-specific. Hashtag locking lets BullMQ's Lua scripts lock one {queue} instead of
     # the whole store; without these flags Dragonfly serialises every BullMQ operation.
