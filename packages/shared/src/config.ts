@@ -44,13 +44,9 @@ const API_PREFIX = "/api";
 const API_VERSION = "v1";
 const HEALTH_PATH = "/health";
 
-/** SigNoz's OTLP ingestion ports, and the UI port. Fixed by SigNoz, not ours to choose. */
+/** OTLP ingestion ports. Fixed by the OpenTelemetry spec, not ours to choose. */
 const OTLP_HTTP_PORT = 4318;
 const OTLP_GRPC_PORT = 4317;
-/** SigNoz serves its UI on 8080 inside its container — the same port our web app uses. */
-const SIGNOZ_UI_CONTAINER_PORT = 8080;
-/** So the local stack publishes it somewhere else. 3301 is SigNoz's own historical UI port. */
-const SIGNOZ_UI_HOST_PORT = 3301;
 
 /** Path the browser posts its log records to on the web app's own origin, then proxied on. */
 const OTLP_PROXY_PREFIX = "/otlp";
@@ -267,10 +263,7 @@ export const config = {
     logsPath: "/v1/logs",
     otlpHttpPort: OTLP_HTTP_PORT,
     otlpGrpcPort: OTLP_GRPC_PORT,
-    signozUiContainerPort: SIGNOZ_UI_CONTAINER_PORT,
-    signozUiHostPort: SIGNOZ_UI_HOST_PORT,
-    signozUiUrl: httpUrl(LOCAL_HOST, SIGNOZ_UI_HOST_PORT),
-    /** Where a locally-run app finds the collector published by `deploy/signoz/local`. */
+    /** Fallback for a collector published on the host; deployments override it via env. */
     defaultEndpoint: httpUrl(LOCAL_HOST, OTLP_HTTP_PORT),
     /** Container-to-host escape hatch, so app containers can reach a host-published collector. */
     dockerHostAlias: "host.docker.internal",

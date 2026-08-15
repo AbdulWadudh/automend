@@ -36,11 +36,9 @@ const sections: EnvSection[] = [
       ["POSTGRES_PASSWORD", localDev.postgres.password],
       ["POSTGRES_DB", localDev.postgres.database],
       ["POSTGRES_PORT", localDev.postgres.containerPort],
-      [
-        "POSTGRES_DATA_PATH",
-        localDev.postgres.dataPath,
-        "Postgres 18+ declares the parent dir as its volume, not PGDATA itself.",
-      ],
+      // POSTGRES_DATA_PATH is deliberately absent: Coolify forbids variable substitution in a
+      // volume target, so docker-compose.yml writes the path literally and tests/compose.test.ts
+      // guards it against config.
       ["REDIS_IMAGE", localDev.redis.image],
       ["REDIS_PORT", localDev.redis.containerPort],
     ],
@@ -61,12 +59,6 @@ const sections: EnvSection[] = [
         "Same collector, as reachable from inside a container. Set both to the same value when the collector is remote.",
       ],
       ["OTEL_EXPORTER_OTLP_HEADERS", ""],
-      [
-        "SIGNOZ_UI_HOST_PORT",
-        telemetry.signozUiHostPort,
-        "Host port for the local SigNoz UI; 8080 is taken by the web app.",
-      ],
-      ["SIGNOZ_UI_CONTAINER_PORT", telemetry.signozUiContainerPort],
       ["OTLP_HTTP_PORT", telemetry.otlpHttpPort],
       ["OTLP_GRPC_PORT", telemetry.otlpGrpcPort],
     ],

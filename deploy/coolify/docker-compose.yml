@@ -1,0 +1,144 @@
+# Automend — single-stack deployment for Coolify.
+#
+# One resource deploys everything: Postgres, Redis (Dragonfly), the migration runner, the API, the
+# worker and the web app. SigNoz is deliberately *not* here — it is its own Coolify resource with
+# its own lifecycle, and this stack only needs its collector URL.
+#
+# This is NOT the repo-root docker-compose.yml. That one is local development only and publishes
+# ports on the host; this one keeps everything on the stack's private network and exposes exactly
+# one thing to the internet: the web app.
+#
+# Coolify treats this file as the source of truth — set values here, not in the UI.
+#
+# Deploy: New Resource → Docker Compose → this file, with the repo as the source.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${SERVICE_USER_POSTGRES}
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+      POSTGRES_DB: ${POSTGRES_DB:-automend}
+    volumes:
+      # Postgres 18 moved PGDATA to /var/lib/postgresql/<major>/docker and declares the *parent*
+      # as its volume. Mounting the old .../data path here would put the database outside the
+      # volume — everything works until the container is recreated, then the data is gone.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # Named `redis` because that is the interface the apps code against; the image is DragonflyDB.
+  redis:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1
+    restart: unless-stopped
+    command:
+      # Not optional. BullMQ's Lua scripts access keys they do not declare, which Dragonfly refuses
+      # by default — every health check stays green while job processing fails completely.
+      # Queue names are brace-wrapped ({flow-executions}) to give it a hashtag to lock on; both
+      # halves are required together.
+      - "--cluster_mode=emulated"
+      - "--lock_on_hashtags"
+      - "--requirepass=${SERVICE_PASSWORD_REDIS}"
+    ulimits:
+      # Dragonfly locks its memory; without this the container fails to start on some hosts.
+      memlock: -1
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${SERVICE_PASSWORD_REDIS}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # Applies the committed Drizzle migrations, then exits. The api and worker wait for it to
+  # succeed, so the schema is always current before anything serves traffic.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["bun", "run", "/app/packages/db/src/migrate.ts"]
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-automend}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      API_PORT: 3000
+      DATABASE_URL: postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-automend}
+      REDIS_URL: redis://:${SERVICE_PASSWORD_REDIS}@redis:6379/0
+      # The browser reaches the API through the web app's own origin, so this is the only origin
+      # that ever makes a cross-origin call.
+      WEB_ORIGIN: ${SERVICE_FQDN_WEB_8080}
+      OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:?set this to your SigNoz collector base URL}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      WORKER_HEALTH_PORT: 3002
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
+      DATABASE_URL: postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-automend}
+      REDIS_URL: redis://:${SERVICE_PASSWORD_REDIS}@redis:6379/0
+      OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:?set this to your SigNoz collector base URL}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # The only service with a domain. It serves the bundle and proxies /api and /otlp onward from
+  # inside this network, which is why the API and the collector need no public exposure and why
+  # neither address ever reaches the browser.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_FQDN_WEB_8080: ${SERVICE_FQDN_WEB_8080}
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      WEB_PORT: 8080
+      API_URL: http://api:3000
+      OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:?set this to your SigNoz collector base URL}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:

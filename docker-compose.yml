@@ -8,10 +8,10 @@
 #
 # Requires a `.env` at the repo root: `cp .env.example .env`.
 #
-# Telemetry: the apps export logs over OTLP to the SigNoz collector run by
-# `deploy/signoz/local/compose.yaml`. That stack publishes the collector on the host, so the app
-# containers reach it through the host gateway rather than sharing a Docker network with it.
-# Start SigNoz first, or set OTEL_LOGS_ENABLED=false to run without it.
+# Telemetry: the apps export logs over OTLP to whatever collector
+# OTEL_EXPORTER_OTLP_ENDPOINT_FROM_CONTAINER names — normally the deployed SigNoz. Set
+# OTEL_LOGS_ENABLED=false to run without one; logs still go to stdout either way.
+# The host-gateway alias below is for the case where the collector is published on the host.
 
 name: automend
 
@@ -41,7 +41,11 @@ services:
       # Postgres 18 moved PGDATA to /var/lib/postgresql/<major>/docker and declares the *parent*
       # as its volume. Mounting the old .../data path against an 18 image leaves the database
       # outside the volume — it works until the container is recreated, then the data is gone.
-      - postgres-data:${POSTGRES_DATA_PATH}
+      #
+      # Written literally, not as ${POSTGRES_DATA_PATH}: Coolify's compose parser rejects variable
+      # substitution in a volume *target* as a path-injection risk. The value still lives in
+      # config.ts (`localDev.postgres.dataPath`) and tests/compose.test.ts fails if the two drift.
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       # Single `$` on purpose: Compose substitutes these from .env before Docker ever sees them,
       # so the values match the ones the server was started with.

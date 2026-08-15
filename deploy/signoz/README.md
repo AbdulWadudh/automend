@@ -16,7 +16,10 @@ Set `OTEL_LOGS_ENABLED=false` to run with stdout logging only.
 
 ## Deploying on Coolify
 
-SigNoz ships a Coolify-specific stack. Generate the current one with
+Use Coolify's own **SigNoz service template** — that is what this project runs. It deploys a
+Zookeeper + ClickHouse layout and exposes the standard OTLP endpoints.
+
+If you would rather generate the stack yourself, SigNoz ships a Coolify-specific one via
 [Foundry](https://signoz.io/docs/install/docker/):
 
 ```bash
@@ -25,13 +28,12 @@ foundryctl gen examples
 # → docs/examples/coolify/stack/pours/deployment/coolify.yaml
 ```
 
-A generated copy is committed here as [`coolify.yaml`](coolify.yaml) for reference. Coolify also
-has its own SigNoz service template, which is a fine alternative — it deploys an older layout
-(Zookeeper + ClickHouse) but exposes the same OTLP endpoints.
+No copy is vendored here on purpose: the generated stack pins exact ClickHouse and Postgres
+versions, and a committed copy nobody runs is a copy nobody updates.
 
 In Coolify:
 
-1. **New Resource → Docker Compose**, paste the stack, deploy.
+1. Deploy the SigNoz template (or paste a generated stack as **New Resource → Docker Compose**).
 2. Give the **SigNoz** service a domain — that is the UI (container port `8080`).
 3. Give the **OTel Collector** service a domain mapped to container port **`4318`** (OTLP/HTTP).
    Automend uses OTLP over HTTP, not gRPC, so `4318` is the only port that needs exposing.
@@ -60,25 +62,22 @@ Prefer one of:
 The browser telemetry path does not need the collector to be public: the browser posts to the web
 app's own origin and the web server proxies onward from inside the network.
 
-## Running SigNoz locally
+## Developing without a collector
 
-[`local/`](local/) holds the Foundry-generated Docker Compose stack plus one override of ours.
+There is no local SigNoz stack in this repo. Running one means ClickHouse, ClickHouse Keeper and
+Postgres on your machine to read log lines you can already see on stdout — every service logs to
+both, so nothing is lost by skipping the collector.
 
 ```bash
-cd deploy/signoz/local
-cp ../../../.env .env      # supplies the port variables
-docker compose up -d
+OTEL_LOGS_ENABLED=false
 ```
 
-- SigNoz UI → <http://localhost:3301>
-- OTLP/HTTP → `http://localhost:4318`
+Set that in `.env` and the apps run with stdout logging only. Point
+`OTEL_EXPORTER_OTLP_ENDPOINT` at the deployed collector when you do want records in SigNoz.
 
-`compose.yaml` is generated verbatim by Foundry and is left untouched so it can be regenerated.
-Our only change lives in `compose.override.yaml`: SigNoz serves its UI on `8080`, which is also
-Automend's web app port, so the local stack publishes it on `3301` instead.
-
-It is a heavy stack — ClickHouse, ClickHouse Keeper and Postgres. If you only need the app running,
-`OTEL_LOGS_ENABLED=false` is the cheaper option.
+If you genuinely need one offline, generate it with `foundryctl gen examples` (above) — note that
+SigNoz serves its UI on `8080`, which collides with Automend's web app, so republish it on another
+host port.
 
 ## Verifying
 
