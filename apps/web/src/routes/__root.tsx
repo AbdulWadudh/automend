@@ -1,6 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, Link, Outlet } from "@tanstack/react-router";
+import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
+import { SiteFooter } from "@/components/site/site-footer";
+import { SiteHeader } from "@/components/site/site-header";
 import { webEnv } from "@/lib/env";
 
 export type RouterContext = {
@@ -18,21 +20,26 @@ const RouterDevtools = webEnv.isDev
     })
   : () => null;
 
+const MAIN_CONTENT_ID = "main-content";
+
 function RootLayout() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b">
-        <nav className="mx-auto flex max-w-4xl items-center gap-6 px-6 py-4">
-          <Link to="/" className="font-semibold tracking-tight">
-            Automend
-          </Link>
-          <span className="text-muted-foreground text-sm">Workflow automation platform</span>
-        </nav>
-      </header>
+    <div className="flex min-h-dvh flex-col bg-background text-foreground">
+      {/* Off-screen until focused, so the first Tab on any page can skip the whole nav. */}
+      <a
+        href={`#${MAIN_CONTENT_ID}`}
+        className="sr-only rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground text-sm focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
+      >
+        Skip to content
+      </a>
 
-      <main className="mx-auto max-w-4xl px-6 py-10">
+      <SiteHeader />
+
+      <main id={MAIN_CONTENT_ID} className="flex-1">
         <Outlet />
       </main>
+
+      <SiteFooter />
 
       <Suspense fallback={null}>
         <RouterDevtools position="bottom-right" />

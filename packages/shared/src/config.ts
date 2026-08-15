@@ -44,6 +44,19 @@ const API_PREFIX = "/api";
 const API_VERSION = "v1";
 const HEALTH_PATH = "/health";
 
+/**
+ * Only *links* read these. `createFileRoute()` still takes a string literal, because the router
+ * plugin derives the route tree from the file name and cannot resolve a value from here.
+ */
+const HOME_ROUTE = "/";
+const STATUS_ROUTE = "/status";
+const PRIVACY_ROUTE = "/privacy";
+const TERMS_ROUTE = "/tos";
+
+const PRODUCT_NAME = "Automend";
+const PUBLIC_DOMAIN = "automend.k79.quest";
+const REPOSITORY_URL = "https://github.com/AbdulWadudh/automend";
+
 /** OTLP ingestion ports. Fixed by the OpenTelemetry spec, not ours to choose. */
 const OTLP_HTTP_PORT = 4318;
 const OTLP_GRPC_PORT = 4317;
@@ -101,10 +114,38 @@ function redisUrl(host: string, port: number): string {
   return `redis://${host}:${port}`;
 }
 
+function emailAddress(mailbox: string, domain: string): string {
+  return `${mailbox}@${domain}`;
+}
+
 const API_BASE_PATH = `${API_PREFIX}/${API_VERSION}` as const;
 
 export const config = {
   appVersion: APP_VERSION,
+
+  /**
+   * Identity values only. Headlines, feature copy and the body of the legal documents stay in the
+   * components that render them — this is the handful of values that would otherwise be repeated
+   * across the header, the footer and both legal pages.
+   */
+  company: {
+    productName: PRODUCT_NAME,
+    /** The entity the terms are entered into with. Same as the product name until incorporated. */
+    legalEntityName: PRODUCT_NAME,
+    domain: PUBLIC_DOMAIN,
+    repositoryUrl: REPOSITORY_URL,
+    emails: {
+      support: emailAddress("support", PUBLIC_DOMAIN),
+      privacy: emailAddress("privacy", PUBLIC_DOMAIN),
+      security: emailAddress("security", PUBLIC_DOMAIN),
+    },
+    legal: {
+      /** Bump in the same change that edits either document — both pages read it from here. */
+      effectiveDate: "2026-08-15",
+      /** Placeholder: the real jurisdiction the entity is registered in must replace this. */
+      governingLaw: "England and Wales",
+    },
+  },
 
   /** Service identities and their network defaults. Names appear in logs and health reports. */
   services: {
@@ -336,6 +377,19 @@ export const config = {
 
   /** Browser-side defaults. Safe to import from React code — this module has no dependencies. */
   webClient: {
+    routes: {
+      home: HOME_ROUTE,
+      status: STATUS_ROUTE,
+      privacy: PRIVACY_ROUTE,
+      terms: TERMS_ROUTE,
+    },
+    /** Deep-linkable anchors on the landing page — the header, the footer and the sections agree. */
+    landingSections: {
+      howItWorks: "how-it-works",
+      features: "features",
+      selfHosting: "self-hosting",
+      faq: "faq",
+    },
     defaultApiBasePath: API_BASE_PATH,
     queryStaleTimeMs: 10_000,
     queryRetryCount: 1,

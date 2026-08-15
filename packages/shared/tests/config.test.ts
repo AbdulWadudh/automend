@@ -101,6 +101,56 @@ describe("http configuration", () => {
   });
 });
 
+describe("web client routes", () => {
+  const webRoutes = Object.values(config.webClient.routes);
+
+  test("every route is an absolute path the router can match", () => {
+    for (const route of webRoutes) {
+      expect(route.startsWith("/")).toBe(true);
+    }
+  });
+
+  test("routes are distinct, so no two pages claim the same address", () => {
+    expect(new Set(webRoutes).size).toBe(webRoutes.length);
+  });
+
+  test("landing anchors are bare fragment identifiers", () => {
+    for (const anchor of Object.values(config.webClient.landingSections)) {
+      expect(anchor).toMatch(/^[a-z][a-z0-9-]*$/);
+    }
+  });
+
+  test("no page route collides with a prefix the web server proxies away", () => {
+    // A page at /api or /otlp would never reach the SPA — server.ts forwards those upstream first.
+    const proxiedPrefixes = [config.http.routes.apiProxyPrefix, config.http.routes.otlpProxyPrefix];
+
+    for (const route of webRoutes) {
+      for (const prefix of proxiedPrefixes) {
+        expect(route.startsWith(prefix)).toBe(false);
+      }
+    }
+  });
+});
+
+describe("public identity", () => {
+  test("every contact address is derived from the one public domain", () => {
+    for (const address of Object.values(config.company.emails)) {
+      expect(address.endsWith(`@${config.company.domain}`)).toBe(true);
+    }
+  });
+
+  test("contact mailboxes are distinct, so two roles cannot share an inbox by accident", () => {
+    const addresses = Object.values(config.company.emails);
+
+    expect(new Set(addresses).size).toBe(addresses.length);
+  });
+
+  test("the legal effective date is a full ISO calendar date", () => {
+    expect(config.company.legal.effectiveDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(Number.isNaN(Date.parse(config.company.legal.effectiveDate))).toBe(false);
+  });
+});
+
 describe("telemetry configuration", () => {
   test("appVersion matches the root package.json, which the browser bundle cannot read", async () => {
     const packageJsonUrl = new URL("../../../package.json", import.meta.url);

@@ -8,6 +8,8 @@
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", sans-serif;
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -73,6 +75,9 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
+  /** Dark enough to carry white text at 4.5:1; the dark-mode value below is tuned separately. */
+  --brand: oklch(0.52 0.15 150);
+  --brand-foreground: oklch(0.985 0 0);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -102,6 +107,8 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  --brand: oklch(0.78 0.18 150);
+  --brand-foreground: oklch(0.21 0.04 150);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -126,5 +133,39 @@
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
+    /* In-page anchors land under the sticky header without this. */
+    scroll-padding-top: 5rem;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  /*
+   * `!important` is load-bearing here: every `transition-*` and `animate-*` utility sets these
+   * same properties, and without it the utility wins and the preference is silently ignored.
+   */
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore-start lint/complexity/noImportantStyles: must override Tailwind's utilities */
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    /* biome-ignore-end lint/complexity/noImportantStyles: must override Tailwind's utilities */
+  }
+}
+
+/**
+ * Faint graph paper behind the hero, echoing the flow canvas. Masked to fade out before the
+ * content below, so it reads as depth rather than as a texture applied to the whole page.
+ */
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, var(--color-border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-border) 1px, transparent 1px);
+  background-size: 3.5rem 3.5rem;
+  mask-image: radial-gradient(ellipse 100% 60% at 50% 0%, black 20%, transparent 75%);
 }

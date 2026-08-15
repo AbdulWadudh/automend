@@ -57,6 +57,20 @@ That starts Postgres, Redis, applies migrations, then boots the API, worker and 
 | Postgres      | `localhost:5432`             | user/password/db all `automend`                             |
 | Redis         | `localhost:6379`             | DragonflyDB behind a Redis-compatible interface             |
 
+The web app serves four pages. Their paths live in `config.webClient.routes`, and everything that
+links to one reads from there:
+
+| Path       | Page                                                                             |
+| ---------- | -------------------------------------------------------------------------------- |
+| `/`        | Landing page                                                                     |
+| `/status`  | Live dependency health — the browser reaching the API, the API reaching Postgres and Redis |
+| `/privacy` | Privacy policy                                                                   |
+| `/tos`     | Terms of service                                                                 |
+
+> The legal pages are **drafts pending legal review**, and the governing-law clause in
+> `config.company.legal` is still a placeholder. See the
+> [changelog entry](changelog/2026/08/2026-08-15-marketing-landing-page.md).
+
 Verify it came up:
 
 ```bash
