@@ -1,0 +1,16 @@
+# Automend's local overrides for the SigNoz stack.
+#
+# `compose.yaml` next to this file is generated verbatim by `foundryctl` (see ../README.md) and is
+# deliberately left untouched so it can be regenerated. Everything we change lives here — Compose
+# merges `compose.override.yaml` automatically.
+#
+# The only change: SigNoz serves its UI on 8080, which is also Automend's web app port. Publishing
+# it on a different host port lets both run at once.
+#
+# `!override` is required because Compose *appends* to list fields by default, which would leave
+# the original 8080 mapping in place alongside the new one and conflict all the same.
+
+services:
+  signoz-signoz-0:
+    ports: !override
+      - "${SIGNOZ_UI_HOST_PORT}:${SIGNOZ_UI_CONTAINER_PORT}"

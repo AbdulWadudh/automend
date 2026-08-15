@@ -1,0 +1,23 @@
+{
+  "name": "@automend/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --env-file=../../.env run --hot src/index.ts",
+    "start": "bun --env-file=../../.env run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "preflight": "bun --env-file=../../.env run scripts/preflight.ts"
+  },
+  "dependencies": {
+    "@automend/db": "workspace:*",
+    "@automend/shared": "workspace:*",
+    "bullmq": "^5.63.0",
+    "ioredis": "^5.9.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

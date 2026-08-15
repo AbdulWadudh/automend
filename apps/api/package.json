@@ -1,0 +1,22 @@
+{
+  "name": "@automend/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --env-file=../../.env run --hot src/index.ts",
+    "start": "bun --env-file=../../.env run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@automend/db": "workspace:*",
+    "@automend/shared": "workspace:*",
+    "hono": "^4.10.4",
+    "ioredis": "^5.9.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

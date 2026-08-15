@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/dist
+# Tests never run inside a runtime image.
+**/tests
+.git
+.env
+.env.*
+!.env.example
+*.log
+README.md
+docker-compose.yml

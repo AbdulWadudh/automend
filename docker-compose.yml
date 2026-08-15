@@ -1,0 +1,161 @@
+# Local development only.
+#
+# Production is NOT this file: Coolify builds and deploys each app's Dockerfile independently.
+#
+# Every value here is substituted from `.env`, which is generated from
+# `packages/shared/src/config.ts` by `bun run config:sync`. Nothing is written down twice —
+# change a port in config.ts, run config:sync, and this file follows.
+#
+# Requires a `.env` at the repo root: `cp .env.example .env`.
+#
+# Telemetry: the apps export logs over OTLP to the SigNoz collector run by
+# `deploy/signoz/local/compose.yaml`. That stack publishes the collector on the host, so the app
+# containers reach it through the host gateway rather than sharing a Docker network with it.
+# Start SigNoz first, or set OTEL_LOGS_ENABLED=false to run without it.
+
+name: automend
+
+x-telemetry: &telemetry
+  OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED}
+  # The *_FROM_CONTAINER variant, because `localhost` inside a container is not the host.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT_FROM_CONTAINER}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS}
+
+# Makes `host.docker.internal` resolve on Linux too, where it is not automatic.
+x-host-gateway: &host-gateway
+  - "host.docker.internal:host-gateway"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    # Told to listen on the configured port, so host and container agree even if it changes.
+    command: ["postgres", "-p", "${POSTGRES_PORT}"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # Single `$` on purpose: Compose substitutes these from .env before Docker ever sees them,
+      # so the values match the ones the server was started with.
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}", "-p", "${POSTGRES_PORT}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Named `redis` because that is the interface every app codes against. The image behind it is
+  # DragonflyDB, which is Redis-wire-compatible — swapping it for stock Redis needs no code change.
+  redis:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1
+    restart: unless-stopped
+    # Dragonfly-specific. Hashtag locking lets BullMQ's Lua scripts lock one {queue} instead of
+    # the whole store; without these flags Dragonfly serialises every BullMQ operation.
+    command:
+      - "--port=${REDIS_PORT}"
+      - "--cluster_mode=emulated"
+      - "--lock_on_hashtags"
+    ulimits:
+      # Dragonfly locks its memory; without this the container fails to start on some hosts.
+      memlock: -1
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "${REDIS_PORT}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Runs the committed Drizzle migrations, then exits. The api and worker wait for it to succeed,
+  # so `docker compose up` always starts against an up-to-date schema.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["bun", "run", "/app/packages/db/src/migrate.ts"]
+    restart: "no"
+    extra_hosts: *host-gateway
+    environment:
+      <<: *telemetry
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      DATABASE_URL: ${DATABASE_URL_FROM_CONTAINER}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    extra_hosts: *host-gateway
+    environment:
+      <<: *telemetry
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      DATABASE_URL: ${DATABASE_URL_FROM_CONTAINER}
+      REDIS_URL: ${REDIS_URL_FROM_CONTAINER}
+      API_PORT: ${API_PORT}
+      WEB_ORIGIN: ${WEB_ORIGIN}
+    ports:
+      - "${API_PORT}:${API_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    extra_hosts: *host-gateway
+    environment:
+      <<: *telemetry
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      DATABASE_URL: ${DATABASE_URL_FROM_CONTAINER}
+      REDIS_URL: ${REDIS_URL_FROM_CONTAINER}
+      WORKER_HEALTH_PORT: ${WORKER_HEALTH_PORT}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY}
+    ports:
+      - "${WORKER_HEALTH_PORT}:${WORKER_HEALTH_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    extra_hosts: *host-gateway
+    environment:
+      <<: *telemetry
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      WEB_PORT: ${WEB_PORT}
+      # In-network proxy target. The browser never sees this address.
+      API_URL: http://api:${API_PORT}
+    ports:
+      - "${WEB_PORT}:${WEB_PORT}"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:

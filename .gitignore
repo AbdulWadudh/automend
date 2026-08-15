@@ -1,0 +1,18 @@
+node_modules/
+dist/
+build/
+
+# Never commit real environment files — only .env.example is tracked.
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Bun / tooling caches
+.bun/
+*.tsbuildinfo
