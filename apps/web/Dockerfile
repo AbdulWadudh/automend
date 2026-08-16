@@ -15,6 +15,9 @@ COPY package.json bun.lock ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 COPY apps/worker/package.json ./apps/worker/
+# Every workspace member's manifest, even ones this app does not import: `--frozen-lockfile`
+# validates the whole lockfile, and a member missing its package.json fails the install.
+COPY packages/auth/package.json ./packages/auth/
 COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
 RUN bun install --frozen-lockfile --filter "@automend/web"
@@ -34,6 +37,7 @@ COPY package.json bun.lock ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 COPY apps/worker/package.json ./apps/worker/
+COPY packages/auth/package.json ./packages/auth/
 COPY packages/db/package.json ./packages/db/
 COPY packages/shared/package.json ./packages/shared/
 RUN bun install --frozen-lockfile --production --filter "@automend/web"
