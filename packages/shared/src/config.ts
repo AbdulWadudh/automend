@@ -497,6 +497,25 @@ export const config = {
       recentDeliveries: 20,
     },
 
+    /**
+     * `{{variable}}` substitution in step fields.
+     *
+     * Substitution, emphatically not evaluation. A template may name a value from the data the
+     * flow received; it may not call anything, index arbitrarily or compute. That is the platform's
+     * first rule — user-authored code never runs in a server process — applied to the place where
+     * it would be most tempting to add "just a small expression language".
+     */
+    templates: {
+      openDelimiter: "{{",
+      closeDelimiter: "}}",
+      /** How deep into a received payload the variable picker will look for values to offer. */
+      maxSampleDepth: 6,
+      /** A cap on what the picker lists, so a large payload cannot produce an unusable menu. */
+      maxSampleVariables: 200,
+      /** Longer values are elided in the picker; the whole value is still what gets substituted. */
+      previewLength: 60,
+    },
+
     /** Where the builder drops nodes, and how far apart it stacks them. */
     canvas: {
       triggerPosition: { x: 0, y: 0 },
@@ -642,6 +661,17 @@ export const config = {
     },
     logMessage: {
       maxLength: 1_000,
+    },
+    /** Comma-separated, and each entry may itself be a template, so this is generous. */
+    emailRecipients: {
+      minLength: 1,
+      maxLength: 2_000,
+    },
+    emailSubject: {
+      maxLength: 500,
+    },
+    emailBody: {
+      maxLength: 50_000,
     },
     webhookPath: {
       minLength: 1,

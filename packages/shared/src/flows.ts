@@ -62,3 +62,23 @@ export const updateFlowRequestSchema = z
 
 export type UpdateFlowRequest = z.infer<typeof updateFlowRequestSchema>;
 
+/**
+ * A request a flow received, as the builder shows it.
+ *
+ * The body is handed over as the text that arrived rather than parsed here: it may not be JSON,
+ * and the drawer shows whatever came in.
+ */
+export const flowDeliverySchema = z.object({
+  id: z.uuid(),
+  method: z.string(),
+  path: z.string(),
+  query: z.string().nullable(),
+  headers: z.record(z.string(), z.string()),
+  body: z.string().nullable(),
+  receivedAt: z.iso.datetime(),
+  processedAt: z.iso.datetime().nullable(),
+});
+
+export type FlowDelivery = z.infer<typeof flowDeliverySchema>;
+
+export const flowDeliveryListSchema = z.array(flowDeliverySchema);

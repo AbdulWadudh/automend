@@ -13,3 +13,4 @@ export * from "./flow-definition";
 export * from "./flows";
 export * from "./health";
 export * from "./queue";
+export * from "./templates";

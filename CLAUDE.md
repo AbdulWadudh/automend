@@ -22,6 +22,7 @@ secure, and easy for a human to read and extend, not clever.
 | Frontend | React (latest) + Vite |
 | Routing / data | TanStack Router + TanStack Query |
 | UI components | shadcn/ui + Tailwind CSS |
+| Template fields | Lexical (variable chips in step configuration) |
 | Flow canvas | @xyflow/react |
 | Auth | Better-Auth |
 | Validation | Zod (shared between API and frontend) |

@@ -12,10 +12,12 @@ import {
   deleteFlowForTenant,
   findFlowForTenant,
   insertFlow,
+  listDeliveriesForFlow,
   listFlowsForTenant,
   updateFlowForTenant,
 } from "@automend/db";
 import {
+  config,
   createDefaultFlowDefinition,
   createFlowRequestSchema,
   type Flow,
@@ -100,6 +102,31 @@ export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
     }
 
     return respondWithData(c, toFlowResponse(row));
+  });
+
+  /**
+   * What this flow has received. Used by the builder to show recent deliveries and to derive the
+   * variables a step can refer to — the shape of real data beats a schema someone typed out.
+   */
+  routes.get(`${FLOW_ID_ROUTE}/deliveries`, async (c) => {
+    const { tenantId } = getRequestContext(c);
+    const flowId = parseUuidParam(c, FLOW_ID_PARAM);
+
+    // Confirms the flow belongs to this workspace before reading anything hanging off it.
+    if (!(await findFlowForTenant(deps.db, tenantId, flowId))) {
+      throw notFoundError(`No flow with id ${flowId}`);
+    }
+
+    const deliveries = await listDeliveriesForFlow(deps.db, tenantId, flowId, config.flows.webhook.recentDeliveries);
+
+    return respondWithData(
+      c,
+      deliveries.map((delivery) => ({
+        ...delivery,
+        receivedAt: delivery.receivedAt.toISOString(),
+        processedAt: delivery.processedAt?.toISOString() ?? null,
+      })),
+    );
   });
 
   routes.delete(FLOW_ID_ROUTE, async (c) => {

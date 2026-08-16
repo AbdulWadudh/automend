@@ -5,9 +5,9 @@
 A self-hosted, AI-centric workflow automation platform — build flows visually (trigger → steps →
 branches/loops), execute them reliably, scale horizontally.
 
-**Status: bootstrap skeleton.** The monorepo, services, database, queue and container builds are
-wired together and verified end to end. Flow execution, auth and the visual canvas are not
-implemented yet.
+**Status: early access.** Accounts, workspaces, the visual builder and third-party connections
+work end to end. **Flow execution does not** — a flow can be designed, saved and delivered to over
+a webhook, but nothing runs it yet. Deliveries are recorded and wait for the engine.
 
 ---
 

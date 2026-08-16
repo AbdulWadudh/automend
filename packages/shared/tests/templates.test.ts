@@ -1,0 +1,189 @@
+import { describe, expect, test } from "bun:test";
+import { config } from "../src/config";
+import { listSampleVariables, listTemplateVariables, renderTemplate, toTemplateToken } from "../src/templates";
+
+/**
+ * The delivery in the request that prompted this: a webhook posts a payload, and a step's fields
+ * refer to it by name.
+ */
+const delivery = {
+  email: "abdulwadudh5@gmail.com",
+  name: "Abdul Wadudh",
+  dob: "17-08-2028",
+  message: "Congrats on the Birthday",
+  from: "Samdani",
+};
+
+describe("rendering a template", () => {
+  test("substitutes a named value", () => {
+    expect(renderTemplate("Hi {{name}}", delivery).text).toBe("Hi Abdul Wadudh");
+  });
+
+  test("renders the worked example end to end", () => {
+    const body = "Hi {{name}}, {{message}}\n\nWith Regards\n{{from}}";
+
+    expect(renderTemplate(body, delivery).text).toBe(
+      "Hi Abdul Wadudh, Congrats on the Birthday\n\nWith Regards\nSamdani",
+    );
+  });
+
+  test("substitutes inside a longer field, leaving the rest alone", () => {
+    // The recipients case: a variable and a literal address in one comma-separated field.
+    expect(renderTemplate("{{email}}, abdulwadudh@gmail.com", delivery).text).toBe(
+      "abdulwadudh5@gmail.com, abdulwadudh@gmail.com",
+    );
+  });
+
+  test("tolerates spaces inside the braces", () => {
+    expect(renderTemplate("Hi {{ name }}", delivery).text).toBe("Hi Abdul Wadudh");
+  });
+
+  test("substitutes every occurrence of the same variable", () => {
+    expect(renderTemplate("{{name}} and {{name}}", delivery).text).toBe("Abdul Wadudh and Abdul Wadudh");
+  });
+
+  test("reaches a nested value by path", () => {
+    const nested = { user: { address: { city: "Hyderabad" } }, items: [{ sku: "A-1" }] };
+
+    expect(renderTemplate("{{user.address.city}}", nested).text).toBe("Hyderabad");
+    expect(renderTemplate("{{items.0.sku}}", nested).text).toBe("A-1");
+  });
+
+  test("renders non-strings readably", () => {
+    const values = { count: 3, active: true, missing: null, tags: ["a", "b"] };
+
+    expect(renderTemplate("{{count}}/{{active}}/{{missing}}/{{tags}}", values).text).toBe('3/true//["a","b"]');
+  });
+
+  test("leaves an unknown variable visible and reports it", () => {
+    // Rendering it away would produce "Hi ," — which reads as a broken flow rather than as a
+    // template pointing at a field the payload does not have.
+    const result = renderTemplate("Hi {{nickname}}", delivery);
+
+    expect(result.text).toBe("Hi {{nickname}}");
+    expect(result.unresolved).toEqual(["nickname"]);
+  });
+
+  test("a template with no variables is returned unchanged", () => {
+    expect(renderTemplate("plain text", delivery).text).toBe("plain text");
+    expect(renderTemplate("", delivery).text).toBe("");
+  });
+});
+
+describe("what a template is not allowed to do", () => {
+  test("cannot reach the prototype chain", () => {
+    for (const path of ["__proto__", "constructor", "constructor.name", "user.__proto__.polluted"]) {
+      const result = renderTemplate(`{{${path}}}`, { user: {} });
+
+      expect(result.text).toBe(`{{${path}}}`);
+      expect(result.unresolved).toEqual([path]);
+    }
+  });
+
+  test("cannot read an inherited property", () => {
+    const inherited = Object.create({ secret: "from the prototype" }) as Record<string, unknown>;
+    inherited.own = "visible";
+
+    expect(renderTemplate("{{secret}}", inherited).unresolved).toEqual(["secret"]);
+    expect(renderTemplate("{{own}}", inherited).text).toBe("visible");
+  });
+
+  test("is not an expression language", () => {
+    // None of these are syntax. They are text that happens to contain braces, and must stay text.
+    for (const attempt of ["{{1 + 1}}", "{{name.toUpperCase()}}", "{{ name || 'x' }}", "{{a b}}"]) {
+      expect(renderTemplate(attempt, delivery).text).toBe(attempt);
+    }
+  });
+
+  test("a context that is not an object resolves nothing", () => {
+    for (const context of [null, undefined, "a string", 42]) {
+      expect(renderTemplate("{{name}}", context).unresolved).toEqual(["name"]);
+    }
+  });
+});
+
+describe("listing the variables a template uses", () => {
+  test("finds each one once, in order", () => {
+    expect(listTemplateVariables("Hi {{name}}, {{message}} — {{name}}")).toEqual(["name", "message"]);
+  });
+
+  test("finds none in plain text", () => {
+    expect(listTemplateVariables("no variables here")).toEqual([]);
+  });
+});
+
+describe("offering variables from a received payload", () => {
+  test("lists every leaf with a preview", () => {
+    const variables = listSampleVariables(delivery);
+
+    expect(variables.map((variable) => variable.path)).toEqual(["email", "name", "dob", "message", "from"]);
+    expect(variables[1]).toMatchObject({ path: "name", preview: "Abdul Wadudh" });
+  });
+
+  test("descends into nested data and names the path", () => {
+    const variables = listSampleVariables({ user: { email: "a@b.c" }, items: [{ sku: "A-1" }] });
+
+    expect(variables.map((variable) => variable.path)).toEqual(["user.email", "items.0.sku"]);
+    expect(variables[0]?.label).toBe("user › email");
+  });
+
+  test("offers leaves rather than the branches above them", () => {
+    // `{{user}}` would substitute a blob of JSON, which is almost never what someone means.
+    expect(listSampleVariables({ user: { email: "a@b.c" } }).map((v) => v.path)).not.toContain("user");
+  });
+
+  test("every offered variable actually resolves", () => {
+    for (const variable of listSampleVariables(delivery)) {
+      expect(renderTemplate(toTemplateToken(variable.path), delivery).unresolved).toEqual([]);
+    }
+  });
+
+  test("a large payload cannot produce an unusable menu", () => {
+    const wide = Object.fromEntries(
+      Array.from({ length: config.flows.templates.maxSampleVariables * 2 }, (_, index) => [`field${index}`, index]),
+    );
+
+    expect(listSampleVariables(wide).length).toBeLessThanOrEqual(config.flows.templates.maxSampleVariables);
+  });
+
+  test("deeply nested data does not recurse without end", () => {
+    let deep: Record<string, unknown> = { value: "bottom" };
+
+    for (let index = 0; index < config.flows.templates.maxSampleDepth * 3; index += 1) {
+      deep = { nested: deep };
+    }
+
+    expect(() => listSampleVariables(deep)).not.toThrow();
+  });
+
+  test("a payload that is not an object offers nothing", () => {
+    expect(listSampleVariables("a string")).toEqual([]);
+    expect(listSampleVariables(null)).toEqual([]);
+  });
+});
+
+describe("a rich-text body", () => {
+  // The email body is stored as HTML with tokens in it. Substitution is string-level, so the
+  // markup is carried through untouched — the renderer neither parses nor escapes it.
+  const body = "<p>Hi <strong>{{name}}</strong>, {{message}}.</p><p>Regards,<br>{{from}}</p>";
+
+  test("substitutes inside markup without disturbing it", () => {
+    expect(renderTemplate(body, delivery).text).toBe(
+      "<p>Hi <strong>Abdul Wadudh</strong>, Congrats on the Birthday.</p><p>Regards,<br>Samdani</p>",
+    );
+  });
+
+  test("a variable inside a list item is substituted like any other", () => {
+    const list = "<ul><li>{{name}}</li><li>{{email}}</li></ul>";
+
+    expect(renderTemplate(list, delivery).text).toBe("<ul><li>Abdul Wadudh</li><li>abdulwadudh5@gmail.com</li></ul>");
+  });
+
+  test("markup in the data is substituted verbatim, not interpreted", () => {
+    // Worth stating: the renderer does not escape. Whatever protects the recipient has to be the
+    // step that sends, which knows whether it is producing HTML or plain text.
+    const injected = renderTemplate("<p>{{name}}</p>", { name: "<script>alert(1)</script>" });
+
+    expect(injected.text).toBe("<p><script>alert(1)</script></p>");
+  });
+});
