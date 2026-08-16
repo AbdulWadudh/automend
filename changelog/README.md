@@ -35,6 +35,7 @@ should explain what git cannot:
 
 | Date | Entry | Type |
 |---|---|---|
+| 2026-08-16 | [Connectors, and a builder you can drive from the keyboard](2026/08/2026-08-16-connectors-and-builder-interactions.md) | feat |
 | 2026-08-16 | [Accounts, workspaces and the flow builder](2026/08/2026-08-16-accounts-workspaces-and-the-flow-builder.md) | feat |
 | 2026-08-15 | [Move the local stack to Postgres 18 and fix its volume mount](2026/08/2026-08-15-postgres-18.md) | chore |
 | 2026-08-15 | [Add a deployment preflight check and Coolify deployment notes](2026/08/2026-08-15-coolify-deployment-preflight.md) | feat |

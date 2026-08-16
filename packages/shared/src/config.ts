@@ -228,6 +228,7 @@ export const config = {
       /** The same report, reachable by the browser through the web app's proxy. */
       apiHealth: `${API_BASE_PATH}${HEALTH_PATH}`,
       flows: `${API_BASE_PATH}/flows`,
+      connections: `${API_BASE_PATH}/connections`,
       /** Better-Auth mounts every one of its own endpoints beneath this single base. */
       auth: AUTH_BASE_PATH,
       authPattern: `${AUTH_BASE_PATH}/*`,
@@ -327,6 +328,114 @@ export const config = {
         label: "Google",
       },
     },
+  },
+
+  /**
+   * Secrets held at rest — connector API tokens today, anything else a flow must keep tomorrow.
+   *
+   * The scheme is envelope encryption: a single-use data key per secret, itself encrypted with the
+   * master key from the environment. See `crypto.ts` for why that beats encrypting each secret
+   * with the master key directly.
+   */
+  secrets: {
+    /** Authenticated encryption, so an edited ciphertext fails instead of decrypting to garbage. */
+    algorithm: "aes-256-gcm",
+    keyLengthBytes: 32,
+    /** 96 bits, the size GCM is defined for; a different length weakens it. */
+    ivLengthBytes: 12,
+    envelopeVersion: 1,
+    /** How much of a stored token is shown back, so it can be recognised but not reconstructed. */
+    hintLength: 4,
+    hintMaskLength: 4,
+  },
+
+  /**
+   * Third-party services a workspace can connect, for flows to act through.
+   *
+   * A connector is not a sign-in method: connecting Slack asks for permission to *do* things,
+   * with scopes far broader than a login. The two are kept apart deliberately — see the auth
+   * package — and a provider only appears here once its credentials are configured.
+   */
+  connectors: {
+    /**
+     * OAuth connections are held by Better-Auth under these provider ids, which are suffixed so
+     * they can never collide with a sign-in provider of the same name. Connecting Google for
+     * automation must not silently widen the scopes of signing in with Google.
+     */
+    connectionProviderSuffix: "-connector",
+    /**
+     * Every OAuth connector must name a `userInfoUrl` and request scopes that identify the
+     * account, on top of whatever it needs to do its job. That is not optional: the callback
+     * resolves an email, an id and a name before it will store anything, and a connector without
+     * them fails at the redirect with `user_info_is_missing`.
+     */
+    providers: [
+      {
+        id: "slack",
+        label: "Slack",
+        kind: "oauth",
+        summary: "Identify a Slack workspace account.",
+        /**
+         * Slack's OpenID Connect endpoints, not its v2 app-install ones.
+         *
+         * Installing a Slack app for `chat:write` returns a *bot* token and no user-info endpoint,
+         * so it cannot satisfy the identity the callback requires. Posting as a bot therefore
+         * needs its own install flow, which is not built — see the changelog. Promising
+         * `chat:write` here would produce a connector that fails the moment anyone used it.
+         */
+        scopes: ["openid", "email", "profile"],
+        authorizationUrl: "https://slack.com/openid/connect/authorize",
+        tokenUrl: "https://slack.com/api/openid.connect.token",
+        userInfoUrl: "https://slack.com/api/openid.connect.userInfo",
+      },
+      {
+        id: "google",
+        label: "Google",
+        kind: "oauth",
+        summary: "Send mail from a Google account.",
+        /** The identity scopes come first because they are what makes the connection storable. */
+        scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/gmail.send"],
+        authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+        tokenUrl: "https://oauth2.googleapis.com/token",
+        userInfoUrl: "https://www.googleapis.com/oauth2/v3/userinfo",
+        /**
+         * `select_account` because a workspace connects *accounts*, not people: whoever is already
+         * signed in to Google is rarely the mailbox being connected, and without this Google skips
+         * the chooser entirely and silently reuses that session.
+         *
+         * `consent` is not redundant with it. Google issues a refresh token only on the first
+         * authorisation unless consent is re-requested, and without a refresh token the connection
+         * stops working an hour later with no way to renew it.
+         */
+        prompt: "select_account consent",
+        /** Required for a refresh token at all — `prompt` alone does not produce one. */
+        accessType: "offline",
+      },
+      {
+        id: "discord",
+        label: "Discord",
+        kind: "oauth",
+        summary: "Read the servers an account belongs to.",
+        /** `email` is required, not decorative: the callback refuses a connection without one. */
+        scopes: ["identify", "email", "guilds"],
+        authorizationUrl: "https://discord.com/oauth2/authorize",
+        tokenUrl: "https://discord.com/api/oauth2/token",
+        userInfoUrl: "https://discord.com/api/users/@me",
+        /**
+         * Discord re-authorises an already-approved app without showing anything, which leaves no
+         * opportunity to switch account. It has no `select_account`; forcing the consent screen is
+         * as far as it goes — switching account itself is done in Discord.
+         */
+        prompt: "consent",
+      },
+      {
+        id: "api-token",
+        label: "API token",
+        kind: "token",
+        summary: "Any service that authenticates with a bearer token or key.",
+        scopes: [],
+      },
+    ],
   },
 
   /**
@@ -530,6 +639,15 @@ export const config = {
       minLength: 1,
       maxLength: 100,
     },
+    connectionName: {
+      minLength: 1,
+      maxLength: 100,
+    },
+    /** Wide enough for a JWT, which is the longest thing anyone reasonably pastes in as a token. */
+    connectionToken: {
+      minLength: 1,
+      maxLength: 4_000,
+    },
   },
 
   /** Browser-side defaults. Safe to import from React code — this module has no dependencies. */
@@ -544,6 +662,7 @@ export const config = {
       app: APP_ROUTE,
       flows: APP_FLOWS_ROUTE,
       flowDetail: `${APP_FLOWS_ROUTE}/$${FLOW_ID_PARAM}`,
+      connections: `${APP_ROUTE}/connections`,
     },
     /** The parameter name in `flowDetail`, so `useParams()` and the link cannot disagree. */
     flowIdParam: FLOW_ID_PARAM,

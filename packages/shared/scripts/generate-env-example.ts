@@ -108,6 +108,35 @@ const sections: EnvSection[] = [
     ],
   },
   {
+    title: "Connectors (api) — services flows act through",
+    note: [
+      "SECRETS_KEY is required. Each provider pair is optional; both halves must be set for it to appear.",
+      "Connecting a service is a SEPARATE OAuth registration from signing in with it, so each needs its",
+      `own redirect URI. Google reuses GOOGLE_CLIENT_ID above and needs BOTH of these registered:`,
+      `  sign-in:   ${localDev.urls.webDev}${auth.basePath}/callback/${auth.socialProviders.google.id}`,
+      `  connector: ${localDev.urls.webDev}${auth.basePath}/oauth2/callback/${auth.socialProviders.google.id}${connectors.connectionProviderSuffix}`,
+    ].join("\n# "),
+    entries: [
+      [
+        "SECRETS_KEY",
+        "",
+        `Envelope-encrypts stored connector tokens. Generate with: openssl rand -base64 ${config.secrets.keyLengthBytes}`,
+      ],
+      [
+        "SLACK_CLIENT_ID",
+        "",
+        `Redirect URI: ${localDev.urls.webDev}${auth.basePath}/oauth2/callback/slack${connectors.connectionProviderSuffix}`,
+      ],
+      ["SLACK_CLIENT_SECRET", ""],
+      [
+        "DISCORD_CLIENT_ID",
+        "",
+        `Redirect URI: ${localDev.urls.webDev}${auth.basePath}/oauth2/callback/discord${connectors.connectionProviderSuffix}`,
+      ],
+      ["DISCORD_CLIENT_SECRET", ""],
+    ],
+  },
+  {
     title: "Worker",
     entries: [
       ["WORKER_HEALTH_PORT", services.worker.defaultHealthPort],

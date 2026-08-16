@@ -222,6 +222,65 @@ The Dragonfly-specific configuration below is *not* optional, and both parts mus
 - **Migrations are the only way schema changes.** Never hand-edit the database; always generate
   and commit a Drizzle migration.
 
+## Interface quality
+
+The builder is the product. A flow editor that looks unfinished is not a working feature with a
+cosmetic problem — people judge whether they can trust software with their automations by how it
+behaves under their hands. Treat the rules below as non-negotiable as the ones above.
+
+- **Never ship a browser-default control into a themed surface.** A native `<select>` renders its
+  option list with the *operating system's* colours, not the page's — on this dark theme it comes
+  back light with unreadable items, and no CSS can reach it. Use the Radix-backed component in
+  `components/ui`, which renders the list as real DOM. The same applies to any control whose popup
+  the browser owns. If a shadcn/Radix component exists for what you are building, use it rather
+  than assembling one from `div`s.
+- **Every interactive element has all of its states.** Hover, focus-visible, active, disabled and
+  loading are part of the component, not an afterthought — a control that looks identical before
+  and after you touch it reads as broken. Focus rings are never removed; `:focus-visible` keeps
+  them off mouse clicks without stranding keyboard users.
+- **Never carry meaning in colour alone.** A red border needs an icon or a message beside it; a
+  selected row needs a tick as well as a highlight. Verify text contrast is at least 4.5:1
+  *against the dark surface it actually sits on*, not against the light theme's values.
+- **Motion explains a change, or it does not exist.** Animate to show where something came from
+  (a menu growing out of its trigger) or that state changed. Animate `transform` and `opacity`
+  only — animating `width`, `height` or `top` causes layout thrash. Keep it quick enough to feel
+  like feedback, honour `prefers-reduced-motion`, and never animate more than a couple of things
+  at once.
+- **Every asynchronous surface has four states, and all four are designed**: loading, empty,
+  error and populated. An empty state says what to do next; an error says what went wrong *and*
+  offers a way forward. A spinner alone is not an empty state.
+- **Labels are visible, and destructive actions are separated.** A placeholder is not a label — it
+  vanishes exactly when the user needs it. Put helper text under the field, errors next to the
+  field they belong to, and keep delete away from the controls people use constantly.
+- **Ask the design skill before inventing.** For anything beyond a small tweak — a new component,
+  a layout, a colour or motion decision — consult the `ui-ux-pro-max` skill first rather than
+  guessing. Guessing is what produced the unreadable dropdown this section exists because of.
+
+### Controls
+
+Each of these was a real defect shipped in this codebase, not a style preference.
+
+- **An icon-only control is a `Button`, never a bare Radix trigger.** A trigger renders an
+  unstyled `button`: no hover state, no focus ring, and a hit area the size of the glyph — well
+  under the 24px a pointer target needs. Use `IconAction`, which wraps `Button` and attaches the
+  tooltip and the `aria-label` together.
+- **Every icon-only control names itself three ways**: a tooltip that opens on hover *and on
+  focus*, and an `aria-label`. A hover-only label does not exist for a keyboard.
+- **Put the action on the thing it acts on.** A copy control belongs inside the field holding the
+  value, pinned so it survives scrolling — not as a sibling button underneath. If you are adding a
+  second element to explain or operate on the first, look for a way to put it *in* the first.
+- **Transient content goes in an overlay, not inline.** Revealing a value, showing a picker or
+  confirming a detail must not resize the row it sits in: growing a row displaces every control
+  beside it, and things that move under the pointer feel broken. Use a popover.
+- **Destructive confirmations keep their words.** An icon is fine shorthand for something you can
+  undo by clicking again; it is the wrong shorthand for confirming something permanent.
+- **Colour comes from the existing palette, and never carries meaning alone.** The node accents in
+  `styles.css` are the product's palette — reuse them so a colour means the same thing everywhere,
+  rather than inventing a hex per component. Every coloured control still needs its label, because
+  a row of glyphs distinguished only by hue is unreadable to a large number of people.
+- **A dynamic class name produces no CSS.** Tailwind finds classes by scanning source text, so
+  `bg-node-${accent}` yields nothing. Map to full literal class strings.
+
 ## Testing expectations
 
 - **Tests live in a `tests/` folder per package, mirroring `src/`** — never beside the file they

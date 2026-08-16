@@ -117,8 +117,18 @@ const apiEnvSchema = baseEnvSchema.extend({
    * registered as the redirect URI with each provider.
    */
   AUTH_BASE_URL: connectionUrlSchema("AUTH_BASE_URL", config.env.urlSchemes.api).default(config.localDev.urls.webDev),
+  /**
+   * Encrypts connector secrets at rest. Separate from AUTH_SECRET on purpose: they protect
+   * different things with different lifetimes, and rotating a session key must not make every
+   * stored API token unreadable.
+   */
+  SECRETS_KEY: z.string().min(1, "SECRETS_KEY is required — generate one with: openssl rand -base64 32"),
   GOOGLE_CLIENT_ID: optionalSecretSchema,
   GOOGLE_CLIENT_SECRET: optionalSecretSchema,
+  SLACK_CLIENT_ID: optionalSecretSchema,
+  SLACK_CLIENT_SECRET: optionalSecretSchema,
+  DISCORD_CLIENT_ID: optionalSecretSchema,
+  DISCORD_CLIENT_SECRET: optionalSecretSchema,
 });
 
 /**

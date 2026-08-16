@@ -12,6 +12,7 @@ const REQUIRED_API_ENV = {
   DATABASE_URL: VALID_DATABASE_URL,
   REDIS_URL: VALID_REDIS_URL,
   AUTH_SECRET: VALID_AUTH_SECRET,
+  SECRETS_KEY: "k".repeat(config.secrets.keyLengthBytes),
 };
 
 function captureErrorMessage(load: () => unknown): string {

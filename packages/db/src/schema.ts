@@ -48,3 +48,61 @@ export const flows = pgTable(
 
 export type FlowRow = typeof flows.$inferSelect;
 export type NewFlowRow = typeof flows.$inferInsert;
+
+/**
+ * A third-party service a workspace has connected, for its flows to act through.
+ *
+ * The workspace owns the connection, not the person who set it up: a flow posting to Slack must
+ * keep working after that person leaves. For an OAuth connection the tokens themselves stay in
+ * Better-Auth's `account` table — which already encrypts and refreshes them — and this row is the
+ * tenant-scoped pointer to them. For a token connection there is no OAuth dance and the secret
+ * lives here, envelope-encrypted.
+ */
+export const connections = pgTable(
+  "connections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Which service, from the catalogue in `config.connectors.providers`. */
+    providerId: text("provider_id").notNull(),
+    /** `oauth` — tokens held by Better-Auth; `token` — a secret held in `encrypted_secret`. */
+    kind: text("kind").notNull(),
+    /** What the workspace calls it, since one service may be connected several times over. */
+    displayName: text("display_name").notNull(),
+    /**
+     * OAuth only: which Better-Auth account holds the tokens. `getAccessToken` needs both, and the
+     * user reference is what lets the worker fetch a token with no session of its own.
+     */
+    accountId: text("account_id"),
+    accountUserId: uuid("account_user_id").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * Who the connected account belongs to, as the provider reports it.
+     *
+     * Copied here rather than fetched for every listing: it is what makes one Google connection
+     * distinguishable from another, and a list of workspace connections should not depend on three
+     * upstream services being reachable. Refreshed whenever the connection is re-authorised.
+     */
+    accountEmail: text("account_email"),
+    accountName: text("account_name"),
+    /** Token connections only. Never selected into a response — see `connections.ts`. */
+    encryptedSecret: jsonb("encrypted_secret").$type<EncryptedSecret>(),
+    /** The last few characters, so a stored token can be recognised without being revealed. */
+    secretHint: text("secret_hint"),
+    scopes: text("scopes"),
+    createdBy: uuid("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("connections_tenant_id_idx").on(table.tenantId),
+    // One workspace may connect the same service several times, but not the same account twice.
+    uniqueIndex("connections_tenant_provider_account_idx")
+      .on(table.tenantId, table.providerId, table.accountId)
+      .where(sql`${table.accountId} is not null`),
+  ],
+);
+
+export type ConnectionRow = typeof connections.$inferSelect;
+export type NewConnectionRow = typeof connections.$inferInsert;

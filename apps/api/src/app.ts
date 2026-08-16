@@ -5,6 +5,7 @@ import type { ApiDependencies } from "./dependencies";
 import { createErrorHandler, notFoundHandler } from "./http/error-handler";
 import { createRequestLogger } from "./http/request-logger";
 import { createAuthProviderRoutes } from "./routes/auth-providers";
+import { createConnectionRoutes } from "./routes/connections";
 import { createFlowRoutes } from "./routes/flows";
 import { createHealthRoutes } from "./routes/health";
 
@@ -36,6 +37,7 @@ export function createApp(deps: ApiDependencies): Hono {
   app.route(config.http.routes.apiHealth, healthRoutes);
   app.route(config.http.routes.authProviders, createAuthProviderRoutes(deps));
   app.route(config.http.routes.flows, createFlowRoutes(deps));
+  app.route(config.http.routes.connections, createConnectionRoutes(deps));
 
   app.notFound(notFoundHandler);
   app.onError(createErrorHandler(deps.logger));

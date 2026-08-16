@@ -5,7 +5,6 @@
  * their own doubles without reaching for module mocking.
  */
 
-import { createDatabaseClient, type Database } from "@automend/db";
 import {
   type Auth,
   type ConnectorCredentialMap,
@@ -13,7 +12,9 @@ import {
   listAvailableConnectors,
   type SocialProviderCredentials,
 } from "@automend/auth";
+import { createDatabaseClient, type Database, findLinkedAccountForUser, type LinkedAccount } from "@automend/db";
 import { config } from "@automend/shared";
+import { parseMasterKey } from "@automend/shared/crypto";
 import { createLogger, type Logger } from "@automend/shared/logger";
 import { startLogTelemetry, type Telemetry } from "@automend/shared/telemetry";
 import { Redis } from "ioredis";
@@ -25,6 +26,17 @@ export type ApiDependencies = {
   auth: Auth;
   /** The social providers this deployment configured, for the sign-in page to render. */
   enabledSocialProviders: string[];
+  /** The connectors this deployment can offer, for the connections dashboard to render. */
+  availableConnectors: string[];
+  /** Encrypts connector secrets. Held as bytes so the key is parsed and checked exactly once. */
+  secretsKey: Buffer;
+  findLinkedAccount: (userId: string, providerId: string) => Promise<LinkedAccount | undefined>;
+  /** Who a linked account belongs to, asked of the provider. Undefined if it cannot be reached. */
+  fetchAccountProfile: (
+    userId: string,
+    providerId: string,
+    accountId: string,
+  ) => Promise<{ email: string | null; name: string | null } | undefined>;
   logger: Logger;
   allowedOrigins: string[];
   shutdown: () => Promise<void>;
@@ -62,6 +74,30 @@ function readCredentialPair(
 }
 
 /**
+ * Credentials for the services flows act through, keyed by connector id.
+ *
+ * Google appears here as well as in the sign-in providers above, and on purpose: the same OAuth
+ * application, registered twice under different provider ids, so that connecting Google for
+ * automation cannot widen what signing in with Google is allowed to do.
+ */
+function readConnectorCredentials(): ConnectorCredentialMap {
+  const credentials: ConnectorCredentialMap = {};
+  const configured = {
+    google: readCredentialPair(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET),
+    slack: readCredentialPair(env.SLACK_CLIENT_ID, env.SLACK_CLIENT_SECRET),
+    discord: readCredentialPair(env.DISCORD_CLIENT_ID, env.DISCORD_CLIENT_SECRET),
+  };
+
+  for (const [connectorId, pair] of Object.entries(configured)) {
+    if (pair) {
+      credentials[connectorId] = pair;
+    }
+  }
+
+  return credentials;
+}
+
+/**
  * Both the origins allowed to call the API and the origin OAuth redirects come back to. They are
  * normally the same address, but a deployment can serve several front-ends from one API.
  */
@@ -96,17 +132,29 @@ export function createApiDependencies(): ApiDependencies {
   });
   const redis = createRedisClient(logger);
   const google = readGoogleCredentials();
+  const connectors = readConnectorCredentials();
+  // Parsed once, at startup: a malformed key must stop the process rather than surface later as a
+  // failure to save someone's API token.
+  const secretsKey = parseMasterKey(env.SECRETS_KEY);
+
   const auth = createAuth({
     db: database.db,
     secret: env.AUTH_SECRET,
     baseUrl: env.AUTH_BASE_URL,
     trustedOrigins: collectTrustedOrigins(),
     google,
+    connectors,
     // Hooks run outside the request they were triggered by, so a failure has nowhere else to
     // surface. Logged rather than thrown: a workspace that was not created is recoverable.
     onHookError: (error, context) => logger.error({ err: error, ...context }, "auth hook failed"),
   });
 
+  const availableConnectors = listAvailableConnectors(connectors);
+
+  logger.info(
+    { authBaseUrl: env.AUTH_BASE_URL, googleSignInEnabled: Boolean(google), availableConnectors },
+    "authentication configured",
+  );
 
   async function shutdown(): Promise<void> {
     await Promise.allSettled([database.close(), redis.quit()]);
@@ -119,6 +167,22 @@ export function createApiDependencies(): ApiDependencies {
     redis,
     auth,
     enabledSocialProviders: google ? [config.auth.socialProviders.google.id] : [],
+    availableConnectors,
+    secretsKey,
+    findLinkedAccount: (userId, providerId) => findLinkedAccountForUser(database.db, userId, providerId),
+    fetchAccountProfile: async (userId, providerId, accountId) => {
+      try {
+        // Goes out to the provider with a token Better-Auth refreshes if needed — the same call
+        // the execution engine will make. Failing it must not fail the connection: a workspace
+        // that authorised a service is connected whether or not we could fetch a label for it.
+        const info = await auth.api.accountInfo({ query: { accountId, providerId, userId } });
+
+        return { email: info?.user.email ?? null, name: info?.user.name ?? null };
+      } catch (error) {
+        logger.warn({ err: error, providerId }, "could not read the connected account's profile");
+        return undefined;
+      }
+    },
     logger,
     allowedOrigins: env.WEB_ORIGIN,
     shutdown,

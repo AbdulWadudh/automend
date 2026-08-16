@@ -75,6 +75,7 @@ The web app is split in two: a public site and, behind a sign-in, the flow build
 | `/sign-up`           | Creates the account **and** its first workspace                                  |
 | `/app/flows`         | Every flow in the workspace                                                      |
 | `/app/flows/<id>`    | The builder: trigger, steps, and the edges between them                          |
+| `/app/connections`   | Services this workspace can act through — Slack, Google, Discord, API tokens     |
 
 > The legal pages are **drafts pending legal review**, and the governing-law clause in
 > `config.company.legal` is still a placeholder. See the
@@ -204,6 +205,9 @@ Defaults come from `config.ts`; `env.ts` never hardcodes one.
 | `API_PORT`           | api                     | no       | `3000`                             |                                                           |
 | `WEB_ORIGIN`         | api                     | no       | dev server + web container origins | Comma-separated list of CORS origins                      |
 | `AUTH_SECRET`        | api                     | **yes**  | —                                  | ≥32 chars; signs session cookies and encrypts OAuth tokens |
+| `SECRETS_KEY`        | api                     | **yes**  | —                                  | base64 of exactly 32 bytes; envelope-encrypts connector tokens |
+| `SLACK_CLIENT_ID` / `_SECRET` | api            | no       | empty                              | Enables the Slack connector                               |
+| `DISCORD_CLIENT_ID` / `_SECRET` | api          | no       | empty                              | Enables the Discord connector                             |
 | `AUTH_BASE_URL`      | api                     | no       | `http://localhost:5173`            | The **browser's** origin — OAuth redirect URIs are built from it |
 | `GOOGLE_CLIENT_ID`   | api                     | no       | empty                              | Set with the secret to offer Google sign-in               |
 | `GOOGLE_CLIENT_SECRET` | api                   | no       | empty                              | Half-configured counts as off                             |

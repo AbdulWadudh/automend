@@ -7,6 +7,7 @@
 
 export * from "./api";
 export * from "./config";
+export * from "./connections";
 export * from "./errors";
 export * from "./flow-definition";
 export * from "./flows";
