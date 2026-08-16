@@ -37,16 +37,57 @@ describe("docker-compose volume mounts", () => {
   });
 });
 
+const coolifyComposeText = await Bun.file(
+  new URL("../../../deploy/coolify/docker-compose.yml", import.meta.url),
+).text();
+const envExampleText = await Bun.file(new URL("../../../.env.example", import.meta.url)).text();
+
+/**
+ * The variables one `# --- Title ---` section of the generated `.env.example` declares.
+ *
+ * Read from the file rather than listed here on purpose: a hand-written list is what let
+ * SECRETS_KEY reach production missing from both compose files, since the test named only the two
+ * variables that happened to exist when it was written. Add a connector to `config.ts` and this
+ * picks it up.
+ */
+function variablesInSection(sectionTitle: string): string[] {
+  const sections = envExampleText.split(/^# --- /m);
+  const section = sections.find((candidate) => candidate.startsWith(sectionTitle)) ?? "";
+  const names: string[] = [];
+
+  for (const match of section.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)) {
+    const name = match[1];
+
+    if (name) {
+      names.push(name);
+    }
+  }
+
+  return names;
+}
+
 describe("docker-compose environment", () => {
-  test("the api receives the variables it cannot start without", () => {
-    // The API's env loader rejects a missing AUTH_SECRET at startup, so leaving it out of the
-    // compose file turns `docker compose up` into a crash loop rather than a warning.
-    // biome-ignore-start lint/suspicious/noTemplateCurlyInString: asserting the literal
-    // `${VAR}` text of a Compose file, not writing a template literal.
-    expect(composeText).toContain("AUTH_SECRET: ${AUTH_SECRET}");
-    expect(composeText).toContain("AUTH_BASE_URL: ${AUTH_BASE_URL}");
-    // biome-ignore-end lint/suspicious/noTemplateCurlyInString: see above
-  });
+  // Every api variable is passed by both files or neither. The API validates its environment at
+  // startup and exits, so a variable missing from a compose file is a crash loop on deploy — and
+  // for an optional one, a connector that silently never appears.
+  const apiSections = ["Authentication (api)", "Connectors (api)"];
+
+  for (const sectionTitle of apiSections) {
+    const variables = variablesInSection(sectionTitle);
+
+    test(`.env.example declares variables under "${sectionTitle}"`, () => {
+      // Guards the parser itself: a renamed section would otherwise make every assertion below
+      // pass over an empty list.
+      expect(variables.length).toBeGreaterThan(0);
+    });
+
+    for (const variable of variables) {
+      test(`the api service receives ${variable} in both compose files`, () => {
+        expect(composeText).toContain(`${variable}:`);
+        expect(coolifyComposeText).toContain(`${variable}:`);
+      });
+    }
+  }
 });
 
 describe("docker-compose image tags", () => {

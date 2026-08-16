@@ -26,14 +26,22 @@ completely** — `/health` reports Redis "up" because `PING` works. In this stac
 
 1. **New Resource → Docker Compose**, source = this repo, compose path
    `deploy/coolify/docker-compose.yml`.
-2. Set the one required variable:
+2. Set the two required variables:
 
    ```
    OTEL_EXPORTER_OTLP_ENDPOINT=https://<your-signoz-collector-domain>
+   SECRETS_KEY=<openssl rand -base64 32>
    ```
 
-   Base URL only — no `/v1/logs`, no port. Deployment fails fast with a message if it is unset,
-   rather than starting a stack that silently ships no logs.
+   `OTEL_EXPORTER_OTLP_ENDPOINT` is the base URL only — no `/v1/logs`, no port.
+
+   `SECRETS_KEY` envelope-encrypts the connector tokens a workspace stores. Unlike the session key
+   it is not a Coolify magic variable: it has to decode to exactly 32 bytes, and
+   `SERVICE_PASSWORD_64_*` yields 48. **Rotating it makes every stored connector token
+   unreadable**, so generate it once and keep it.
+
+   Both fail the deployment with a message if unset, rather than starting a stack that crash-loops
+   or silently ships no logs.
 
 3. Assign a domain to the **web** service (container port `8080`). Coolify fills
    `SERVICE_FQDN_WEB_8080`, which also becomes the API's `WEB_ORIGIN`.
@@ -68,6 +76,8 @@ not the API — the browser only ever talks to the web app, which proxies onward
 | `WORKER_CONCURRENCY` | `5` | |
 | `GOOGLE_CLIENT_ID` | empty | Set with the secret to offer Google sign-in |
 | `GOOGLE_CLIENT_SECRET` | empty | |
+| `SLACK_CLIENT_ID` / `_SECRET` | empty | Enables the Slack connector; both halves or neither |
+| `DISCORD_CLIENT_ID` / `_SECRET` | empty | Enables the Discord connector; both halves or neither |
 | `OTEL_LOGS_ENABLED` | `true` | `false` for stdout logging only |
 | `OTEL_EXPORTER_OTLP_HEADERS` | empty | Ingestion key for a hosted backend |
 

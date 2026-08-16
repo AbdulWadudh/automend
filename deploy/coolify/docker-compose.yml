@@ -94,6 +94,19 @@ services:
       # register with Google is ${SERVICE_FQDN_WEB_8080}/api/v1/auth/callback/google.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Envelope-encrypts stored connector tokens. Set by hand rather than from a Coolify magic
+      # variable: this must decode to exactly 32 bytes, and SERVICE_PASSWORD_64_* yields 48.
+      # Generate with: openssl rand -base64 32
+      # Rotating it makes every stored connector token unreadable, so treat it as permanent.
+      # Quoted because the `:?` message would otherwise put a colon in an unquoted YAML scalar.
+      SECRETS_KEY: "${SECRETS_KEY:?generate one with openssl rand -base64 32}"
+      # Optional, and each pair is all-or-nothing. Connecting a service is a SEPARATE OAuth
+      # registration from signing in with it: the redirect URI is
+      # ${SERVICE_FQDN_WEB_8080}/api/v1/auth/oauth2/callback/<provider>-connector
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
       OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:?set this to your SigNoz collector base URL}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}

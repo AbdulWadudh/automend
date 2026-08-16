@@ -35,6 +35,7 @@ should explain what git cannot:
 
 | Date | Entry | Type |
 |---|---|---|
+| 2026-08-16 | [Container builds find the auth package, and deployments get their encryption key](2026/08/2026-08-16-container-builds-and-deploy-environment.md) | fix |
 | 2026-08-16 | [Data received by a flow reaches the steps below it](2026/08/2026-08-16-flow-variables-and-webhook-testing.md) | feat |
 | 2026-08-16 | [A real inbound endpoint for webhook triggers](2026/08/2026-08-16-flow-webhook-endpoints.md) | feat |
 | 2026-08-16 | [Connectors, and a builder you can drive from the keyboard](2026/08/2026-08-16-connectors-and-builder-interactions.md) | feat |
