@@ -28,6 +28,7 @@ const columns: FooterColumn[] = [
   {
     heading: "Resources",
     links: [
+      { label: "Sign in", route: routes.signIn },
       { label: "Source code", href: repositoryUrl },
       { label: "Platform status", route: routes.status },
       { label: "Support", href: `mailto:${emails.support}` },

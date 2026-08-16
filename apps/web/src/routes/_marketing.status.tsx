@@ -70,6 +70,6 @@ function StatusPage() {
   );
 }
 
-export const Route = createFileRoute("/status")({
+export const Route = createFileRoute("/_marketing/status")({
   component: StatusPage,
 });

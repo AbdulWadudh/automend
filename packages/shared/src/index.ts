@@ -8,6 +8,7 @@
 export * from "./api";
 export * from "./config";
 export * from "./errors";
+export * from "./flow-definition";
 export * from "./flows";
 export * from "./health";
 export * from "./queue";

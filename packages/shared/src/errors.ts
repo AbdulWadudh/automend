@@ -12,6 +12,7 @@
 
 export const API_ERROR_CODES = {
   BAD_REQUEST: "BAD_REQUEST",
+  UNAUTHENTICATED: "UNAUTHENTICATED",
   NOT_FOUND: "NOT_FOUND",
   FLOW_VALIDATION_FAILED: "FLOW_VALIDATION_FAILED",
   STEP_EXECUTION_FAILED: "STEP_EXECUTION_FAILED",
@@ -71,6 +72,16 @@ export function dependencyUnavailableError(message: string, options?: DomainErro
 /** The request body, query or params did not match the expected schema. */
 export function requestValidationError(message: string, options?: DomainErrorOptions): AutomendError {
   return createAutomendError("RequestValidationError", API_ERROR_CODES.BAD_REQUEST, 400, message, options);
+}
+
+/**
+ * The caller has no valid session.
+ *
+ * There is deliberately no separate "forbidden" error for tenant-owned data: a flow belonging to
+ * another workspace is reported as missing, because confirming it exists is itself a leak.
+ */
+export function unauthenticatedError(message: string, options?: DomainErrorOptions): AutomendError {
+  return createAutomendError("UnauthenticatedError", API_ERROR_CODES.UNAUTHENTICATED, 401, message, options);
 }
 
 /** The requested resource does not exist, or is not visible to the caller's tenant. */

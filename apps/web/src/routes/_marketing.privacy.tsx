@@ -110,6 +110,6 @@ function PrivacyPage() {
   );
 }
 
-export const Route = createFileRoute("/privacy")({
+export const Route = createFileRoute("/_marketing/privacy")({
   component: PrivacyPage,
 });

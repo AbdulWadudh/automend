@@ -34,6 +34,37 @@ describe("derived values stay in step with their primitives", () => {
     expect(config.webClient.defaultApiBasePath).toBe(config.http.basePath);
   });
 
+  test("every API route is versioned, including the ones Better-Auth owns", () => {
+    const versionedRoutes = [
+      config.http.routes.apiHealth,
+      config.http.routes.flows,
+      config.http.routes.auth,
+      config.http.routes.authProviders,
+    ];
+
+    for (const route of versionedRoutes) {
+      expect(route.startsWith(config.http.basePath)).toBe(true);
+    }
+  });
+
+  test("no route of ours sits inside the subtree Better-Auth generates", () => {
+    // Better-Auth builds its own paths beneath `auth`, and a plugin can add one at any version.
+    // Anything of ours in there would end up shadowing it, or being shadowed by it, silently.
+    const ourRoutes = [config.http.routes.apiHealth, config.http.routes.flows, config.http.routes.authProviders];
+
+    for (const route of ourRoutes) {
+      expect(route.startsWith(`${config.http.routes.auth}/`)).toBe(false);
+    }
+  });
+
+  test("the app's page routes are built from one another, not written out twice", () => {
+    const { routes } = config.webClient;
+
+    expect(routes.flows.startsWith(`${routes.app}/`)).toBe(true);
+    expect(routes.flowDetail.startsWith(`${routes.flows}/`)).toBe(true);
+    expect(routes.flowDetail.endsWith(`$${config.webClient.flowIdParam}`)).toBe(true);
+  });
+
   test("local dev connection strings are composed from the same credentials and ports", () => {
     const { postgres, redis, urls, host } = config.localDev;
 

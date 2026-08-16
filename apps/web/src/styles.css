@@ -131,6 +131,16 @@
   body {
     @apply bg-background text-foreground;
   }
+  /*
+   * Tailwind v4's Preflight sets `cursor: default` on buttons, matching the browser default rather
+   * than v3's `pointer`. Restored here, once, rather than by adding `cursor-pointer` to every
+   * component — a button that does not look clickable is a bug in every one of them.
+   * https://tailwindcss.com/docs/upgrade-guide
+   */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
   html {
     @apply font-sans;
     scroll-behavior: smooth;

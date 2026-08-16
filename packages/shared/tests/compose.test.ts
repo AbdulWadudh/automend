@@ -37,6 +37,18 @@ describe("docker-compose volume mounts", () => {
   });
 });
 
+describe("docker-compose environment", () => {
+  test("the api receives the variables it cannot start without", () => {
+    // The API's env loader rejects a missing AUTH_SECRET at startup, so leaving it out of the
+    // compose file turns `docker compose up` into a crash loop rather than a warning.
+    // biome-ignore-start lint/suspicious/noTemplateCurlyInString: asserting the literal
+    // `${VAR}` text of a Compose file, not writing a template literal.
+    expect(composeText).toContain("AUTH_SECRET: ${AUTH_SECRET}");
+    expect(composeText).toContain("AUTH_BASE_URL: ${AUTH_BASE_URL}");
+    // biome-ignore-end lint/suspicious/noTemplateCurlyInString: see above
+  });
+});
+
 describe("docker-compose image tags", () => {
   test("images are substituted from .env rather than hardcoded", () => {
     // The inverse of the volume rule: images *are* safe to substitute, and doing so keeps the

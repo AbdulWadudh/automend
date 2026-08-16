@@ -25,6 +25,19 @@ export function apiSuccessSchema<Schema extends z.ZodType>(dataSchema: Schema) {
   return z.object({ data: dataSchema });
 }
 
+/**
+ * Which sign-in methods this deployment actually offers.
+ *
+ * A social provider is only usable when its credentials were configured, and that is decided at
+ * container start — so the sign-in page asks rather than assuming, and never renders a button that
+ * would fail at the redirect.
+ */
+export const authProvidersSchema = z.object({
+  social: z.array(z.string().min(1)),
+});
+
+export type AuthProviders = z.infer<typeof authProvidersSchema>;
+
 export const dependencyHealthSchema = z.object({
   status: z.enum(["up", "down"]),
   latencyMs: z.number().int().nonnegative(),

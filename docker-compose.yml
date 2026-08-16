@@ -105,6 +105,11 @@ services:
       REDIS_URL: ${REDIS_URL_FROM_CONTAINER}
       API_PORT: ${API_PORT}
       WEB_ORIGIN: ${WEB_ORIGIN}
+      AUTH_SECRET: ${AUTH_SECRET}
+      # The browser's address, not the API's: OAuth providers redirect back to where the user is.
+      AUTH_BASE_URL: ${AUTH_BASE_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     ports:
       - "${API_PORT}:${API_PORT}"
     depends_on:

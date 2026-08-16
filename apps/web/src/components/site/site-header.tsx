@@ -1,8 +1,39 @@
 import { config } from "@automend/shared";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { authClient } from "@/lib/auth-client";
 
 const { routes, landingSections } = config.webClient;
+
+/**
+ * Signing up and signing in, or a way back into the app for someone already signed in.
+ *
+ * The signed-out pair is what renders while the session is still being fetched: almost everyone
+ * arriving at a landing page is signed out, so that is the state worth showing first rather than
+ * holding the header empty until a request comes back.
+ */
+function AccountActions() {
+  const { data: session } = authClient.useSession();
+
+  if (session) {
+    return (
+      <Button asChild size="lg">
+        <Link to={routes.flows}>Open {config.company.productName}</Link>
+      </Button>
+    );
+  }
+
+  return (
+    <>
+      <Button asChild variant="ghost" size="lg">
+        <Link to={routes.signIn}>Sign in</Link>
+      </Button>
+      <Button asChild size="lg">
+        <Link to={routes.signUp}>Get started</Link>
+      </Button>
+    </>
+  );
+}
 
 const sectionLinks = [
   { anchor: landingSections.howItWorks, label: "How it works" },
@@ -43,14 +74,10 @@ export function SiteHeader() {
         </ul>
 
         <div className="ml-auto flex items-center gap-1.5">
-          <Button asChild variant="ghost" size="lg" className="hidden sm:inline-flex">
+          <Button asChild variant="ghost" size="lg" className="hidden lg:inline-flex">
             <Link to={routes.status}>Status</Link>
           </Button>
-          <Button asChild size="lg">
-            <Link to={routes.home} hash={landingSections.selfHosting}>
-              Get started
-            </Link>
-          </Button>
+          <AccountActions />
         </div>
       </nav>
     </header>

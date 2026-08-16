@@ -5,6 +5,14 @@ import { isEnvValidationError } from "../src/errors";
 
 const VALID_DATABASE_URL = "postgres://automend:secret@localhost:5432/automend";
 const VALID_REDIS_URL = "redis://localhost:6379";
+const VALID_AUTH_SECRET = "s".repeat(config.auth.secretMinLength);
+
+/** The variables the API cannot start without, so each test only states what it is about. */
+const REQUIRED_API_ENV = {
+  DATABASE_URL: VALID_DATABASE_URL,
+  REDIS_URL: VALID_REDIS_URL,
+  AUTH_SECRET: VALID_AUTH_SECRET,
+};
 
 function captureErrorMessage(load: () => unknown): string {
   try {
@@ -18,10 +26,7 @@ function captureErrorMessage(load: () => unknown): string {
 
 describe("loadApiEnv", () => {
   test("applies defaults for optional variables", () => {
-    const env = loadApiEnv({
-      DATABASE_URL: VALID_DATABASE_URL,
-      REDIS_URL: VALID_REDIS_URL,
-    });
+    const env = loadApiEnv(REQUIRED_API_ENV);
 
     // Asserts that the loader applies the configured defaults, not what those defaults happen to
     // be — the values themselves are config's business, and config.test.ts guards their shape.
@@ -32,19 +37,14 @@ describe("loadApiEnv", () => {
   });
 
   test("coerces the port from its string environment value", () => {
-    const env = loadApiEnv({
-      DATABASE_URL: VALID_DATABASE_URL,
-      REDIS_URL: VALID_REDIS_URL,
-      API_PORT: "8080",
-    });
+    const env = loadApiEnv({ ...REQUIRED_API_ENV, API_PORT: "8080" });
 
     expect(env.API_PORT).toBe(8080);
   });
 
   test("splits WEB_ORIGIN into a trimmed list", () => {
     const env = loadApiEnv({
-      DATABASE_URL: VALID_DATABASE_URL,
-      REDIS_URL: VALID_REDIS_URL,
+      ...REQUIRED_API_ENV,
       WEB_ORIGIN: "http://localhost:5173, https://app.example.com",
     });
 
@@ -64,12 +64,7 @@ describe("loadApiEnv", () => {
   });
 
   test("rejects a connection string pointing at the wrong kind of service", () => {
-    const message = captureErrorMessage(() =>
-      loadApiEnv({
-        DATABASE_URL: VALID_REDIS_URL,
-        REDIS_URL: VALID_REDIS_URL,
-      }),
-    );
+    const message = captureErrorMessage(() => loadApiEnv({ ...REQUIRED_API_ENV, DATABASE_URL: VALID_REDIS_URL }));
 
     expect(message).toContain("DATABASE_URL must start with");
   });
@@ -82,12 +77,38 @@ describe("loadApiEnv", () => {
     expect(message).toContain("API_PORT");
   });
 
+  test("rejects an auth secret short enough to guess", () => {
+    const message = captureErrorMessage(() =>
+      loadApiEnv({ ...REQUIRED_API_ENV, AUTH_SECRET: "s".repeat(config.auth.secretMinLength - 1) }),
+    );
+
+    expect(message).toContain("AUTH_SECRET");
+  });
+
+  test("treats a half-configured social provider as switched off", () => {
+    // Both halves or neither: a client id without its secret would fail at the redirect, long
+    // after the sign-in page had already offered the button.
+    const env = loadApiEnv({ ...REQUIRED_API_ENV, GOOGLE_CLIENT_ID: "id-without-a-secret" });
+
+    expect(env.GOOGLE_CLIENT_ID).toBe("id-without-a-secret");
+    expect(env.GOOGLE_CLIENT_SECRET).toBeUndefined();
+  });
+
+  test("treats an empty provider credential as absent", () => {
+    const env = loadApiEnv({ ...REQUIRED_API_ENV, GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" });
+
+    expect(env.GOOGLE_CLIENT_ID).toBeUndefined();
+    expect(env.GOOGLE_CLIENT_SECRET).toBeUndefined();
+  });
+
+  test("defaults the auth base URL to the browser's origin, not the API's", () => {
+    // OAuth redirects come back to where the browser is, which is the web app.
+    expect(loadApiEnv(REQUIRED_API_ENV).AUTH_BASE_URL).toBe(config.localDev.urls.webDev);
+  });
+
   test("never echoes the offending value, which may be a secret", () => {
     const message = captureErrorMessage(() =>
-      loadApiEnv({
-        DATABASE_URL: "mysql://root:hunter2@localhost/db",
-        REDIS_URL: VALID_REDIS_URL,
-      }),
+      loadApiEnv({ ...REQUIRED_API_ENV, DATABASE_URL: "mysql://root:hunter2@localhost/db" }),
     );
 
     expect(message).not.toContain("hunter2");

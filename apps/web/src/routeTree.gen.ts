@@ -9,104 +9,296 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as StatusRouteImport } from './routes/status'
-import { Route as TosRouteImport } from './routes/tos'
+import { Route as MarketingRouteImport } from './routes/_marketing'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as MarketingIndexRouteImport } from './routes/_marketing.index'
+import { Route as MarketingPrivacyRouteImport } from './routes/_marketing.privacy'
+import { Route as MarketingStatusRouteImport } from './routes/_marketing.status'
+import { Route as MarketingTosRouteImport } from './routes/_marketing.tos'
+import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as AppConnectionsRouteImport } from './routes/app/connections'
+import { Route as AppFlowsIndexRouteImport } from './routes/app/flows/index'
+import { Route as AppFlowsFlowIdRouteImport } from './routes/app/flows/$flowId'
 
-const IndexRoute = IndexRouteImport.update({
+const MarketingRoute = MarketingRouteImport.update({
+  id: '/_marketing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignUpRoute = SignUpRouteImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MarketingIndexRoute = MarketingIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => MarketingRoute,
 } as any)
-const PrivacyRoute = PrivacyRouteImport.update({
+const MarketingPrivacyRoute = MarketingPrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => MarketingRoute,
 } as any)
-const StatusRoute = StatusRouteImport.update({
+const MarketingStatusRoute = MarketingStatusRouteImport.update({
   id: '/status',
   path: '/status',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => MarketingRoute,
 } as any)
-const TosRoute = TosRouteImport.update({
+const MarketingTosRoute = MarketingTosRouteImport.update({
   id: '/tos',
   path: '/tos',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => MarketingRoute,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppConnectionsRoute = AppConnectionsRouteImport.update({
+  id: '/connections',
+  path: '/connections',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFlowsIndexRoute = AppFlowsIndexRouteImport.update({
+  id: '/flows/',
+  path: '/flows/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFlowsFlowIdRoute = AppFlowsFlowIdRouteImport.update({
+  id: '/flows/$flowId',
+  path: '/flows/$flowId',
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/privacy': typeof PrivacyRoute
-  '/status': typeof StatusRoute
-  '/tos': typeof TosRoute
+  '/': typeof MarketingIndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
+  '/privacy': typeof MarketingPrivacyRoute
+  '/status': typeof MarketingStatusRoute
+  '/tos': typeof MarketingTosRoute
+  '/app/connections': typeof AppConnectionsRoute
+  '/app/': typeof AppIndexRoute
+  '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
+  '/app/flows/': typeof AppFlowsIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/privacy': typeof PrivacyRoute
-  '/status': typeof StatusRoute
-  '/tos': typeof TosRoute
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
+  '/privacy': typeof MarketingPrivacyRoute
+  '/status': typeof MarketingStatusRoute
+  '/tos': typeof MarketingTosRoute
+  '/app/connections': typeof AppConnectionsRoute
+  '/': typeof MarketingIndexRoute
+  '/app': typeof AppIndexRoute
+  '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
+  '/app/flows': typeof AppFlowsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/privacy': typeof PrivacyRoute
-  '/status': typeof StatusRoute
-  '/tos': typeof TosRoute
+  '/_marketing': typeof MarketingRouteWithChildren
+  '/app': typeof AppRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/sign-up': typeof SignUpRoute
+  '/_marketing/privacy': typeof MarketingPrivacyRoute
+  '/_marketing/status': typeof MarketingStatusRoute
+  '/_marketing/tos': typeof MarketingTosRoute
+  '/app/connections': typeof AppConnectionsRoute
+  '/_marketing/': typeof MarketingIndexRoute
+  '/app/': typeof AppIndexRoute
+  '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
+  '/app/flows/': typeof AppFlowsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/privacy' | '/status' | '/tos'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/sign-in'
+    | '/sign-up'
+    | '/privacy'
+    | '/status'
+    | '/tos'
+    | '/app/connections'
+    | '/app/'
+    | '/app/flows/$flowId'
+    | '/app/flows/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/privacy' | '/status' | '/tos'
-  id: '__root__' | '/' | '/privacy' | '/status' | '/tos'
+  to:
+    | '/sign-in'
+    | '/sign-up'
+    | '/privacy'
+    | '/status'
+    | '/tos'
+    | '/app/connections'
+    | '/'
+    | '/app'
+    | '/app/flows/$flowId'
+    | '/app/flows'
+  id:
+    | '__root__'
+    | '/_marketing'
+    | '/app'
+    | '/sign-in'
+    | '/sign-up'
+    | '/_marketing/privacy'
+    | '/_marketing/status'
+    | '/_marketing/tos'
+    | '/app/connections'
+    | '/_marketing/'
+    | '/app/'
+    | '/app/flows/$flowId'
+    | '/app/flows/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  PrivacyRoute: typeof PrivacyRoute
-  StatusRoute: typeof StatusRoute
-  TosRoute: typeof TosRoute
+  MarketingRoute: typeof MarketingRouteWithChildren
+  AppRoute: typeof AppRouteWithChildren
+  SignInRoute: typeof SignInRoute
+  SignUpRoute: typeof SignUpRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_marketing': {
+      id: '/_marketing'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof MarketingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-up': {
+      id: '/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_marketing/': {
+      id: '/_marketing/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof MarketingIndexRouteImport
+      parentRoute: typeof MarketingRoute
     }
-    '/privacy': {
-      id: '/privacy'
+    '/_marketing/privacy': {
+      id: '/_marketing/privacy'
       path: '/privacy'
       fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof MarketingPrivacyRouteImport
+      parentRoute: typeof MarketingRoute
     }
-    '/status': {
-      id: '/status'
+    '/_marketing/status': {
+      id: '/_marketing/status'
       path: '/status'
       fullPath: '/status'
-      preLoaderRoute: typeof StatusRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof MarketingStatusRouteImport
+      parentRoute: typeof MarketingRoute
     }
-    '/tos': {
-      id: '/tos'
+    '/_marketing/tos': {
+      id: '/_marketing/tos'
       path: '/tos'
       fullPath: '/tos'
-      preLoaderRoute: typeof TosRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof MarketingTosRouteImport
+      parentRoute: typeof MarketingRoute
+    }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/connections': {
+      id: '/app/connections'
+      path: '/connections'
+      fullPath: '/app/connections'
+      preLoaderRoute: typeof AppConnectionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/flows/': {
+      id: '/app/flows/'
+      path: '/flows'
+      fullPath: '/app/flows/'
+      preLoaderRoute: typeof AppFlowsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/flows/$flowId': {
+      id: '/app/flows/$flowId'
+      path: '/flows/$flowId'
+      fullPath: '/app/flows/$flowId'
+      preLoaderRoute: typeof AppFlowsFlowIdRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
 
+interface MarketingRouteChildren {
+  MarketingPrivacyRoute: typeof MarketingPrivacyRoute
+  MarketingStatusRoute: typeof MarketingStatusRoute
+  MarketingTosRoute: typeof MarketingTosRoute
+  MarketingIndexRoute: typeof MarketingIndexRoute
+}
+
+const MarketingRouteChildren: MarketingRouteChildren = {
+  MarketingPrivacyRoute: MarketingPrivacyRoute,
+  MarketingStatusRoute: MarketingStatusRoute,
+  MarketingTosRoute: MarketingTosRoute,
+  MarketingIndexRoute: MarketingIndexRoute,
+}
+
+const MarketingRouteWithChildren = MarketingRoute._addFileChildren(
+  MarketingRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppConnectionsRoute: typeof AppConnectionsRoute
+  AppIndexRoute: typeof AppIndexRoute
+  AppFlowsFlowIdRoute: typeof AppFlowsFlowIdRoute
+  AppFlowsIndexRoute: typeof AppFlowsIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppConnectionsRoute: AppConnectionsRoute,
+  AppIndexRoute: AppIndexRoute,
+  AppFlowsFlowIdRoute: AppFlowsFlowIdRoute,
+  AppFlowsIndexRoute: AppFlowsIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  PrivacyRoute: PrivacyRoute,
-  StatusRoute: StatusRoute,
-  TosRoute: TosRoute,
+  MarketingRoute: MarketingRouteWithChildren,
+  AppRoute: AppRouteWithChildren,
+  SignInRoute: SignInRoute,
+  SignUpRoute: SignUpRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

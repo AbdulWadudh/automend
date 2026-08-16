@@ -139,6 +139,6 @@ function TermsPage() {
   );
 }
 
-export const Route = createFileRoute("/tos")({
+export const Route = createFileRoute("/_marketing/tos")({
   component: TermsPage,
 });

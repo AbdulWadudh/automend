@@ -46,6 +46,24 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": srcDirectory,
       },
+      /**
+       * Lexical checks that every node registered with an editor subclasses *its own*
+       * `LexicalNode`. Two copies of the package therefore mean two class identities and an editor
+       * that refuses to start — `nodes[1] ListNode is not a constructor that subclasses
+       * LexicalNode`.
+       *
+       * Rollup collapses the duplicates when building, so this only ever fails in dev, where each
+       * pre-bundled dependency can end up carrying its own copy. Listing them here forces one.
+       */
+      dedupe: [
+        "lexical",
+        "@lexical/react",
+        "@lexical/list",
+        "@lexical/rich-text",
+        "@lexical/html",
+        "@lexical/utils",
+        "@lexical/selection",
+      ],
     },
     server: {
       port: config.services.web.devServerPort,

@@ -33,16 +33,21 @@ export function Hero() {
             it, and let a real execution engine handle the retries, branches and failures — on servers you control.
           </p>
 
+          {/*
+            Two paths, because there are genuinely two: use the instance in front of you, or run
+            your own. "See how it works" is not repeated here — it is in the nav, and it is the
+            next section down the page anyway.
+          */}
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg" className="h-11 px-5 text-base">
-              <Link to={routes.home} hash={landingSections.selfHosting}>
-                Deploy it yourself
+              <Link to={routes.signUp}>
+                Start building
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="h-11 px-5 text-base">
-              <Link to={routes.home} hash={landingSections.howItWorks}>
-                See how it works
+              <Link to={routes.home} hash={landingSections.selfHosting}>
+                Deploy it yourself
               </Link>
             </Button>
           </div>

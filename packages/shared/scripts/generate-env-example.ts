@@ -17,7 +17,7 @@ type EnvSection = {
   entries: Array<[name: string, value: string | number, comment?: string]>;
 };
 
-const { localDev, services, env, http, telemetry } = config;
+const { localDev, services, env, http, telemetry, auth, connectors } = config;
 
 const sections: EnvSection[] = [
   {
@@ -87,6 +87,24 @@ const sections: EnvSection[] = [
         http.cors.defaultOrigins.join(env.originListSeparator),
         "Comma-separated list of browser origins allowed to call the API.",
       ],
+    ],
+  },
+  {
+    title: "Authentication (api)",
+    note: "AUTH_SECRET is required and has no default — the API refuses to start without it.",
+    entries: [
+      ["AUTH_SECRET", "", `At least ${auth.secretMinLength} characters. Generate with: openssl rand -base64 32`],
+      [
+        "AUTH_BASE_URL",
+        localDev.urls.webDev,
+        "The origin the browser uses. OAuth redirect URIs are built from it, so it must match what is registered with the provider.",
+      ],
+      [
+        "GOOGLE_CLIENT_ID",
+        "",
+        `Leave both blank to disable "Continue with ${auth.socialProviders.google.label}". Redirect URI: ${localDev.urls.webDev}${auth.basePath}/callback/${auth.socialProviders.google.id}`,
+      ],
+      ["GOOGLE_CLIENT_SECRET", ""],
     ],
   },
   {

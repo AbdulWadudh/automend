@@ -133,17 +133,45 @@ async function ensureEngine(): Promise<void> {
   await waitForEngine();
 }
 
+/** The variable names an env file declares, ignoring comments and blank lines. */
+function declaredVariables(contents: string): string[] {
+  return contents
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#") && line.includes("="))
+    .map((line) => line.slice(0, line.indexOf("=")).trim());
+}
+
 async function ensureEnvFile(): Promise<void> {
   step("Environment file");
 
-  if (await Bun.file(`${repositoryRoot}/.env`).exists()) {
-    console.log("  .env present");
-    return;
+  const envFile = Bun.file(`${repositoryRoot}/.env`);
+
+  if (!(await envFile.exists())) {
+    // Compose substitutes ${VAR} from .env. Without it every port and credential resolves to an
+    // empty string and the failures that follow name none of this as the cause.
+    fail("no .env at the repository root", "cp .env.example .env");
   }
 
-  // Compose substitutes ${VAR} from .env. Without it every port and credential resolves to an
-  // empty string and the failures that follow name none of this as the cause.
-  fail("no .env at the repository root", "cp .env.example .env");
+  /**
+   * A variable added to `.env.example` since this `.env` was written is the failure worth catching
+   * here, because of how badly it presents otherwise: the apps read their environment once at
+   * startup, so a running `bun --hot` process keeps serving the last module graph that loaded
+   * successfully. The result is a server that answers 404 for a route that plainly exists in the
+   * source, with the real error only in a terminal nobody is watching.
+   */
+  const declared = new Set(declaredVariables(await envFile.text()));
+  const expected = declaredVariables(await Bun.file(`${repositoryRoot}/.env.example`).text());
+  const missing = expected.filter((name) => !declared.has(name));
+
+  if (missing.length > 0) {
+    fail(
+      `.env is missing ${missing.length === 1 ? "a variable" : "variables"} that .env.example declares: ${missing.join(", ")}`,
+      "add them to .env — see .env.example for what each one is for, and note that a running dev server must be restarted to pick them up",
+    );
+  }
+
+  console.log(`  .env present, with all ${expected.length} variables .env.example declares`);
 }
 
 async function startServices(startEverything: boolean): Promise<void> {

@@ -93,11 +93,32 @@ const databaseEnvSchema = baseEnvSchema.extend({
   DATABASE_URL: databaseUrlSchema,
 });
 
+/**
+ * Present and non-empty, or absent. An OAuth provider is enabled only when *both* halves of its
+ * credential pair are supplied, so a half-configured provider is treated as switched off rather
+ * than failing at the redirect.
+ */
+const optionalSecretSchema = z
+  .string()
+  .optional()
+  .transform((value) => (value && value.length > 0 ? value : undefined));
+
 const apiEnvSchema = baseEnvSchema.extend({
   DATABASE_URL: databaseUrlSchema,
   REDIS_URL: redisUrlSchema,
   API_PORT: portSchema.default(config.services.api.defaultPort),
   WEB_ORIGIN: originListSchema,
+  AUTH_SECRET: z
+    .string()
+    .min(config.auth.secretMinLength, `AUTH_SECRET must be at least ${config.auth.secretMinLength} characters`),
+  /**
+   * The origin the *browser* uses, not the API's own address: OAuth callback URLs are built from
+   * it and the browser reaches the API through the web app's proxy. It is also what must be
+   * registered as the redirect URI with each provider.
+   */
+  AUTH_BASE_URL: connectionUrlSchema("AUTH_BASE_URL", config.env.urlSchemes.api).default(config.localDev.urls.webDev),
+  GOOGLE_CLIENT_ID: optionalSecretSchema,
+  GOOGLE_CLIENT_SECRET: optionalSecretSchema,
 });
 
 /**

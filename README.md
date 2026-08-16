@@ -30,9 +30,14 @@ apps/
   worker/         BullMQ consumer — flow execution engine (placeholder processor for now)
   web/            React + Vite app — flow builder UI
 packages/
+  auth/           Better-Auth instance, workspace creation, session resolution  (api now, worker later)
   db/             Drizzle schema, migrations, connection helpers  (used by api + worker)
   shared/         Zod schemas, typed env config, logger, domain errors  (used by everything)
 ```
+
+Authentication is a package rather than part of the API because the API will not be its only
+caller: flow steps that act against a third-party service need the OAuth tokens Better-Auth
+already stores and refreshes, and those run in the **worker**, which has no HTTP session.
 
 `packages/*` are internal workspace packages — never published, imported via `workspace:*`.
 Bun runs TypeScript directly, so there is no build step for the server apps.
@@ -57,15 +62,19 @@ That starts Postgres, Redis, applies migrations, then boots the API, worker and 
 | Postgres      | `localhost:5432`             | user/password/db all `automend`                             |
 | Redis         | `localhost:6379`             | DragonflyDB behind a Redis-compatible interface             |
 
-The web app serves four pages. Their paths live in `config.webClient.routes`, and everything that
-links to one reads from there:
+The web app is split in two: a public site and, behind a sign-in, the flow builder. Paths live in
+`config.webClient.routes`, and everything that links to one reads from there:
 
-| Path       | Page                                                                             |
-| ---------- | -------------------------------------------------------------------------------- |
-| `/`        | Landing page                                                                     |
-| `/status`  | Live dependency health — the browser reaching the API, the API reaching Postgres and Redis |
-| `/privacy` | Privacy policy                                                                   |
-| `/tos`     | Terms of service                                                                 |
+| Path                 | Page                                                                             |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `/`                  | Landing page                                                                     |
+| `/status`            | Live dependency health — the browser reaching the API, the API reaching Postgres and Redis |
+| `/privacy`           | Privacy policy                                                                   |
+| `/tos`               | Terms of service                                                                 |
+| `/sign-in`           | Email and password, plus Google when it is configured                            |
+| `/sign-up`           | Creates the account **and** its first workspace                                  |
+| `/app/flows`         | Every flow in the workspace                                                      |
+| `/app/flows/<id>`    | The builder: trigger, steps, and the edges between them                          |
 
 > The legal pages are **drafts pending legal review**, and the governing-law clause in
 > `config.company.legal` is still a placeholder. See the
@@ -74,9 +83,10 @@ links to one reads from there:
 Verify it came up:
 
 ```bash
-curl http://localhost:3000/health        # real Postgres + Redis probe, 503 if either is down
-curl http://localhost:3000/api/v1/flows  # {"data":[]}
-curl http://localhost:8080/api/v1/health # same report, through the web app's proxy
+curl http://localhost:3000/health                 # real Postgres + Redis probe, 503 if either is down
+curl http://localhost:3000/api/v1/auth-providers  # which sign-in methods this deployment offers
+curl http://localhost:3000/api/v1/flows           # 401 — flows belong to a workspace, so a session is required
+curl http://localhost:8080/api/v1/health          # same report, through the web app's proxy
 ```
 
 Tear down with `docker compose down` (add `-v` to also drop the Postgres and Dragonfly volumes).
@@ -151,6 +161,8 @@ Nothing to export by hand.
 | `bun run check:fix`        | Biome lint + format, writing fixes                             |
 | `bun run config:sync`      | Regenerate `.env.example` from `config.ts`                     |
 | `bun run config:check`     | Fail if `.env.example` is stale (use in CI)                    |
+| `bun run auth:schema`      | Regenerate the Better-Auth tables from the auth options        |
+| `bun run auth:schema:check`| Fail if those tables are stale (use in CI)                     |
 | `bun run telemetry:verify` | Send marked log records to the collector and report acceptance |
 | `bun run build`            | Production build (only the web app has one)                    |
 | `bun run db:generate`      | Generate a migration from schema changes                       |
@@ -191,6 +203,10 @@ Defaults come from `config.ts`; `env.ts` never hardcodes one.
 | `REDIS_URL`          | api, worker             | **yes**  | —                                  | must start with `redis://` or `rediss://`                 |
 | `API_PORT`           | api                     | no       | `3000`                             |                                                           |
 | `WEB_ORIGIN`         | api                     | no       | dev server + web container origins | Comma-separated list of CORS origins                      |
+| `AUTH_SECRET`        | api                     | **yes**  | —                                  | ≥32 chars; signs session cookies and encrypts OAuth tokens |
+| `AUTH_BASE_URL`      | api                     | no       | `http://localhost:5173`            | The **browser's** origin — OAuth redirect URIs are built from it |
+| `GOOGLE_CLIENT_ID`   | api                     | no       | empty                              | Set with the secret to offer Google sign-in               |
+| `GOOGLE_CLIENT_SECRET` | api                   | no       | empty                              | Half-configured counts as off                             |
 | `WORKER_HEALTH_PORT` | worker                  | no       | `3002`                             |                                                           |
 | `WORKER_CONCURRENCY` | worker                  | no       | `5`                                | 1–100                                                     |
 | `WEB_PORT`           | web container           | no       | `8080`                             |                                                           |

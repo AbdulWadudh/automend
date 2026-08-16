@@ -1,23 +1,117 @@
 /**
- * `/api/v1/flows` — placeholder listing.
+ * `/api/v1/flows` — the flows a workspace owns.
  *
- * It deliberately does not read the `flows` table yet. Every read of tenant-owned data must be
- * scoped by tenant, and the tenant only becomes known once authentication is wired up; shipping
- * an unscoped `select * from flows` in the meantime is exactly the shortcut that is expensive to
- * undo. The route returns an empty collection until `deps` can supply a tenant context.
+ * Every handler reads its tenant from the request context rather than from the request itself, and
+ * every query passes it to the query helper, which puts it in the `where` clause. A flow that
+ * belongs to another workspace is reported as missing, not as forbidden: saying "you may not see
+ * this" confirms that it exists.
  */
 
-import type { Flow } from "@automend/shared";
+import type { FlowRow } from "@automend/db";
+import {
+  deleteFlowForTenant,
+  findFlowForTenant,
+  insertFlow,
+  listFlowsForTenant,
+  updateFlowForTenant,
+} from "@automend/db";
+import {
+  createDefaultFlowDefinition,
+  createFlowRequestSchema,
+  type Flow,
+  notFoundError,
+  updateFlowRequestSchema,
+} from "@automend/shared";
 import { Hono } from "hono";
 import type { ApiDependencies } from "../dependencies";
 import { respondWithData } from "../http/envelope";
+import { createRequireSession, getRequestContext, type SessionEnv } from "../http/session";
+import { parseJsonBody, parseUuidParam } from "../http/validation";
 
-export function createFlowRoutes(_deps: ApiDependencies): Hono {
-  const routes = new Hono();
+/** Local to this router: nothing outside it addresses the parameter by name. */
+const FLOW_ID_PARAM = "flowId";
+const FLOW_ID_ROUTE = `/:${FLOW_ID_PARAM}`;
 
-  routes.get("/", (c) => {
-    const flows: Flow[] = [];
-    return respondWithData(c, flows);
+/**
+ * Timestamps become ISO strings and the definition is handed over as stored. The column is typed
+ * `jsonb`, so it is validated by `flowSchema` on the way in — not re-parsed on the way out.
+ */
+function toFlowResponse(row: FlowRow): Flow {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    name: row.name,
+    description: row.description,
+    definition: row.definition,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
+  const routes = new Hono<SessionEnv>();
+
+  routes.use(createRequireSession(deps));
+
+  routes.get("/", async (c) => {
+    const { tenantId } = getRequestContext(c);
+    const rows = await listFlowsForTenant(deps.db, tenantId);
+
+    return respondWithData(c, rows.map(toFlowResponse));
+  });
+
+  routes.post("/", async (c) => {
+    const { tenantId, userId } = getRequestContext(c);
+    const body = await parseJsonBody(c, createFlowRequestSchema);
+
+    const row = await insertFlow(deps.db, {
+      tenantId,
+      name: body.name,
+      description: body.description ?? null,
+      definition: body.definition ?? createDefaultFlowDefinition(),
+      createdBy: userId,
+    });
+
+    return respondWithData(c, toFlowResponse(row), 201);
+  });
+
+  routes.get(FLOW_ID_ROUTE, async (c) => {
+    const { tenantId } = getRequestContext(c);
+    const flowId = parseUuidParam(c, FLOW_ID_PARAM);
+    const row = await findFlowForTenant(deps.db, tenantId, flowId);
+
+    if (!row) {
+      throw notFoundError(`No flow with id ${flowId}`);
+    }
+
+    return respondWithData(c, toFlowResponse(row));
+  });
+
+  routes.patch(FLOW_ID_ROUTE, async (c) => {
+    const { tenantId } = getRequestContext(c);
+    const flowId = parseUuidParam(c, FLOW_ID_PARAM);
+    const body = await parseJsonBody(c, updateFlowRequestSchema);
+
+    const row = await updateFlowForTenant(deps.db, tenantId, flowId, body);
+
+    if (!row) {
+      throw notFoundError(`No flow with id ${flowId}`);
+    }
+
+    return respondWithData(c, toFlowResponse(row));
+  });
+
+  routes.delete(FLOW_ID_ROUTE, async (c) => {
+    const { tenantId } = getRequestContext(c);
+    const flowId = parseUuidParam(c, FLOW_ID_PARAM);
+    const deleted = await deleteFlowForTenant(deps.db, tenantId, flowId);
+
+    if (!deleted) {
+      throw notFoundError(`No flow with id ${flowId}`);
+    }
+
+    return respondWithData(c, { id: flowId });
   });
 
   return routes;

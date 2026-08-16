@@ -1,0 +1,270 @@
+import { config, type Flow, type FlowDefinition, flowDefinitionSchema, listSampleVariables } from "@automend/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { CheckIcon, CircleAlertIcon, LoaderCircleIcon, WebhookIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { FlowCanvas } from "@/components/flows/flow-canvas";
+import { NodeInspector } from "@/components/flows/node-inspector";
+import { ShortcutsHelp } from "@/components/flows/shortcuts-help";
+import { StepPalette } from "@/components/flows/step-palette";
+import { useFlowShortcuts } from "@/components/flows/use-flow-shortcuts";
+import { WebhookDrawer } from "@/components/flows/webhook-drawer";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { duplicateStep, isTrigger, removeStep } from "@/lib/flow-editor";
+import { flowQueryKeys, getFlow, listDeliveries, updateFlow } from "@/lib/flows-api";
+
+const { routes, flowIdParam } = config.webClient;
+const { flowName } = config.validation;
+
+/**
+ * The first problem the definition has, phrased for the person editing it.
+ *
+ * The same schema runs on the API, so this is not the check that protects the database — it is
+ * what stops the author reaching for Save and being told no by a server round trip.
+ */
+function findDefinitionProblem(definition: FlowDefinition): string | undefined {
+  const result = flowDefinitionSchema.safeParse(definition);
+
+  return result.success ? undefined : result.error.issues[0]?.message;
+}
+
+/**
+ * Whether the work on screen is safe.
+ *
+ * A validation problem is the one state that must not read as ordinary muted text — it is the
+ * reason the Save button is disabled, so it is coloured and carries an icon rather than relying on
+ * colour alone. Announced politely so a screen reader hears the change without being interrupted.
+ */
+function SaveStatus({
+  isSaving,
+  problem,
+  hasUnsavedChanges,
+}: {
+  isSaving: boolean;
+  problem: string | undefined;
+  hasUnsavedChanges: boolean;
+}) {
+  if (problem) {
+    return (
+      <span aria-live="polite" className="flex max-w-xs items-center gap-1.5 text-destructive text-xs" title={problem}>
+        <CircleAlertIcon className="size-3.5 shrink-0" />
+        <span className="truncate">{problem}</span>
+      </span>
+    );
+  }
+
+  const label = isSaving ? "Saving…" : hasUnsavedChanges ? "Unsaved changes" : "All changes saved";
+
+  return (
+    <span aria-live="polite" className="flex items-center gap-1.5 text-muted-foreground text-xs">
+      {isSaving ? (
+        <LoaderCircleIcon className="size-3.5 animate-spin" />
+      ) : hasUnsavedChanges ? (
+        <span className="size-1.5 rounded-full bg-muted-foreground" />
+      ) : (
+        <CheckIcon className="size-3.5" />
+      )}
+      {label}
+    </span>
+  );
+}
+
+function FlowBuilder({ flow }: { flow: Flow }) {
+  const queryClient = useQueryClient();
+
+  const [name, setName] = useState(flow.name);
+  const [definition, setDefinition] = useState<FlowDefinition>(flow.definition);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(undefined);
+  const [isShowingShortcuts, setIsShowingShortcuts] = useState(false);
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState(() =>
+    JSON.stringify({ name: flow.name, definition: flow.definition }),
+  );
+
+  // Another tab, or a reload, can bring a newer version of the flow than the one this component
+  // started with; adopting it is better than silently editing a stale copy.
+  useEffect(() => {
+    setName(flow.name);
+    setDefinition(flow.definition);
+    setSavedSnapshot(JSON.stringify({ name: flow.name, definition: flow.definition }));
+  }, [flow]);
+
+  const save = useMutation({
+    mutationFn: () => updateFlow(flow.id, { name: name.trim(), definition }),
+    onSuccess: async (updated) => {
+      setSavedSnapshot(JSON.stringify({ name: updated.name, definition: updated.definition }));
+      queryClient.setQueryData(flowQueryKeys.detail(flow.id), updated);
+      await queryClient.invalidateQueries({ queryKey: flowQueryKeys.list() });
+    },
+  });
+
+  // Two different things, and conflating them is what made a freshly switched trigger answer 404:
+  // the draft decides whether the builder *offers* webhook tooling, the saved definition decides
+  // whether an address actually exists, because that is what the API routes on.
+  const draftWebhookPath = definition.trigger.config.kind === "webhook" ? definition.trigger.config.path : undefined;
+  const savedWebhookPath =
+    flow.definition.trigger.config.kind === "webhook" ? flow.definition.trigger.config.path : undefined;
+
+  /**
+   * The variables a step can name, taken from the most recent delivery.
+   *
+   * Derived from data the flow actually received rather than from a schema someone declared: the
+   * field names in the last payload are, by definition, the ones that will be there next time.
+   */
+  const deliveries = useQuery({
+    queryKey: flowQueryKeys.deliveries(flow.id),
+    queryFn: ({ signal }) => listDeliveries(flow.id, signal),
+    enabled: savedWebhookPath !== undefined,
+  });
+
+  const variables = useMemo(() => {
+    const latest = deliveries.data?.[0]?.body;
+
+    if (!latest) {
+      return [];
+    }
+
+    try {
+      return listSampleVariables(JSON.parse(latest));
+    } catch {
+      // A delivery that is not JSON offers no named fields. That is a fact about the payload, not
+      // an error worth showing — the picker is simply empty.
+      return [];
+    }
+  }, [deliveries.data]);
+
+  const problem = findDefinitionProblem(definition);
+  const hasUnsavedChanges = JSON.stringify({ name, definition }) !== savedSnapshot;
+  const canSave = hasUnsavedChanges && !problem && name.trim().length >= flowName.minLength && !save.isPending;
+
+  useFlowShortcuts({
+    onSave: () => {
+      if (canSave) {
+        save.mutate();
+      }
+    },
+    onDeleteSelected: () => {
+      // The trigger is not deletable: a flow without one could never start.
+      if (selectedNodeId && !isTrigger(definition, selectedNodeId)) {
+        setDefinition(removeStep(definition, selectedNodeId));
+        setSelectedNodeId(undefined);
+      }
+    },
+    onDuplicateSelected: () => {
+      if (!selectedNodeId) {
+        return;
+      }
+
+      const duplicated = duplicateStep(definition, selectedNodeId);
+
+      if (duplicated) {
+        setDefinition(duplicated.definition);
+        setSelectedNodeId(duplicated.stepId);
+      }
+    },
+    onClearSelection: () => setSelectedNodeId(undefined),
+    onToggleShortcuts: () => setIsShowingShortcuts((showing) => !showing),
+  });
+
+  return (
+    <div className="flex flex-1 flex-col">
+      <div className="flex flex-wrap items-center gap-3 border-b px-6 py-3">
+        <Link to={routes.flows} className="text-muted-foreground text-sm hover:text-foreground">
+          ← Flows
+        </Link>
+
+        <Input
+          aria-label="Flow name"
+          value={name}
+          maxLength={flowName.maxLength}
+          onChange={(event) => setName(event.target.value)}
+          className="h-8 w-full max-w-xs"
+        />
+
+        <StepPalette definition={definition} onChange={setDefinition} onSelect={setSelectedNodeId} />
+
+        {draftWebhookPath !== undefined && (
+          <Button variant="outline" size="sm" onClick={() => setIsTestingWebhook((testing) => !testing)}>
+            <WebhookIcon data-icon="inline-start" />
+            {isTestingWebhook ? "Hide test" : "Test webhook"}
+          </Button>
+        )}
+
+        <div className="ml-auto flex items-center gap-3">
+          <SaveStatus isSaving={save.isPending} problem={problem} hasUnsavedChanges={hasUnsavedChanges} />
+          <ShortcutsHelp open={isShowingShortcuts} onOpenChange={setIsShowingShortcuts} />
+          <Button size="sm" disabled={!canSave} onClick={() => save.mutate()}>
+            Save
+          </Button>
+        </div>
+      </div>
+
+      {save.isError && (
+        <p role="alert" className="border-b bg-destructive/10 px-6 py-2 text-destructive text-sm">
+          {save.error.message}
+        </p>
+      )}
+
+      <div className="flex flex-1 flex-col lg:flex-row">
+        <div className="h-[60vh] flex-1 lg:h-auto">
+          <FlowCanvas
+            definition={definition}
+            selectedNodeId={selectedNodeId}
+            onChange={setDefinition}
+            onSelect={setSelectedNodeId}
+          />
+        </div>
+
+        <NodeInspector
+          flowId={flow.id}
+          variables={variables}
+          savedWebhookPath={savedWebhookPath}
+          definition={definition}
+          selectedNodeId={selectedNodeId}
+          onChange={setDefinition}
+          onSelect={setSelectedNodeId}
+        />
+
+        {draftWebhookPath !== undefined && (
+          <WebhookDrawer
+            flowId={flow.id}
+            savedPath={savedWebhookPath}
+            open={isTestingWebhook}
+            onOpenChange={setIsTestingWebhook}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FlowBuilderPage() {
+  const { [flowIdParam]: flowId } = Route.useParams();
+
+  const flow = useQuery({
+    queryKey: flowQueryKeys.detail(flowId),
+    queryFn: ({ signal }) => getFlow(flowId, signal),
+  });
+
+  if (flow.isPending) {
+    return <p className="px-6 py-10 text-muted-foreground">Loading…</p>;
+  }
+
+  if (flow.isError) {
+    return (
+      <div className="space-y-3 px-6 py-10">
+        <p className="text-destructive">{flow.error.message}</p>
+        <Link to={routes.flows} className="text-sm underline underline-offset-4">
+          Back to flows
+        </Link>
+      </div>
+    );
+  }
+
+  return <FlowBuilder flow={flow.data} />;
+}
+
+export const Route = createFileRoute("/app/flows/$flowId")({
+  component: FlowBuilderPage,
+});
