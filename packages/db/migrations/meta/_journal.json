@@ -36,6 +36,13 @@
       "when": 1786878981455,
       "tag": "0004_backfill-connection-display-names",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786880709590,
+      "tag": "0005_shiny_korath",
+      "breakpoints": true
     }
   ]
 }

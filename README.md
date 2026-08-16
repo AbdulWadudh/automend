@@ -88,6 +88,7 @@ curl http://localhost:3000/health                 # real Postgres + Redis probe,
 curl http://localhost:3000/api/v1/auth-providers  # which sign-in methods this deployment offers
 curl http://localhost:3000/api/v1/flows           # 401 — flows belong to a workspace, so a session is required
 curl http://localhost:8080/api/v1/health          # same report, through the web app's proxy
+curl -X POST http://localhost:3000/api/v1/hooks/<flowId>/<path>  # a flow's webhook — no session, any method
 ```
 
 Tear down with `docker compose down` (add `-v` to also drop the Postgres and Dragonfly volumes).

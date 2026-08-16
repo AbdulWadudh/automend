@@ -229,6 +229,13 @@ export const config = {
       apiHealth: `${API_BASE_PATH}${HEALTH_PATH}`,
       flows: `${API_BASE_PATH}/flows`,
       connections: `${API_BASE_PATH}/connections`,
+      /**
+       * Inbound webhooks. The only unauthenticated route in the versioned API: the caller is a
+       * third-party service that has no session and never will. What stands in for authentication
+       * is the flow's own id in the URL — 122 bits of randomness, and the reason the address must
+       * be treated as a credential.
+       */
+      hooks: `${API_BASE_PATH}/hooks`,
       /** Better-Auth mounts every one of its own endpoints beneath this single base. */
       auth: AUTH_BASE_PATH,
       authPattern: `${AUTH_BASE_PATH}/*`,
@@ -463,6 +470,31 @@ export const config = {
       minMs: 0,
       /** An hour. Anything longer belongs in a schedule trigger, not a blocking step. */
       maxMs: SECONDS_PER_HOUR * 1_000,
+    },
+    /** Inbound webhook deliveries — what a `webhook` trigger actually receives. */
+    webhook: {
+      /**
+       * Every method, because a webhook endpoint does not get to choose what a third party sends.
+       * The flow decides what to do with it; the endpoint's job is to accept it.
+       */
+      acceptsAllMethods: true,
+      /**
+       * Bodies above this are rejected with 413 rather than stored. A webhook receiver is an
+       * unauthenticated write endpoint, so the size of what it will keep has to be bounded.
+       */
+      maxBodyBytes: 1_000_000,
+      /**
+       * Read from the request when present, so a sender that retries does not run the flow twice.
+       * Generated when absent — a delivery is still recorded, it just cannot be de-duplicated.
+       */
+      idempotencyHeader: "idempotency-key",
+      /**
+       * Never stored. A webhook's own authentication arrives in these, and a delivery log is not
+       * a place to keep other people's credentials.
+       */
+      redactedHeaders: ["authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key"],
+      /** How many the builder lists. Enough to find the one you just sent, not a log viewer. */
+      recentDeliveries: 20,
     },
 
     /** Where the builder drops nodes, and how far apart it stacks them. */

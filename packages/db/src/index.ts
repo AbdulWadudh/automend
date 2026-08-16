@@ -35,3 +35,5 @@ export {
 } from "./organizations";
 export type { ConnectionRow, FlowRow, NewConnectionRow, NewFlowRow } from "./schema";
 export * as schema from "./schema";
+export type { DeliverySummary, RecordDeliveryValues, RecordedDelivery, WebhookTarget } from "./webhooks";
+export { findFlowForWebhook, listDeliveriesForFlow, recordWebhookDelivery } from "./webhooks";

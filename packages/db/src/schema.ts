@@ -106,3 +106,46 @@ export const connections = pgTable(
 
 export type ConnectionRow = typeof connections.$inferSelect;
 export type NewConnectionRow = typeof connections.$inferInsert;
+
+/**
+ * A request that arrived at a flow's webhook.
+ *
+ * Recorded before anything else happens to it, so an accepted delivery is never lost to a crash,
+ * a deploy, or an execution engine that does not exist yet. `processed_at` is what the engine will
+ * claim; until then every row sits here unprocessed, which is an honest state rather than a
+ * silently dropped request.
+ */
+export const flowWebhookDeliveries = pgTable(
+  "flow_webhook_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    flowId: uuid("flow_id")
+      .notNull()
+      .references(() => flows.id, { onDelete: "cascade" }),
+    /**
+     * From the sender's `Idempotency-Key` when it offers one, otherwise generated. Unique per
+     * flow, so a retried delivery resolves to the row already stored instead of running twice.
+     */
+    idempotencyKey: text("idempotency_key").notNull(),
+    method: text("method").notNull(),
+    path: text("path").notNull(),
+    query: text("query"),
+    /** Sensitive headers are dropped before this is written — see `config.flows.webhook`. */
+    headers: jsonb("headers").$type<Record<string, string>>().notNull(),
+    body: text("body"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Null until the execution engine claims it. */
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("flow_webhook_deliveries_flow_id_idx").on(table.flowId),
+    // What the engine will scan: the oldest unclaimed delivery for any flow.
+    index("flow_webhook_deliveries_unprocessed_idx").on(table.receivedAt).where(sql`${table.processedAt} is null`),
+    uniqueIndex("flow_webhook_deliveries_flow_idempotency_idx").on(table.flowId, table.idempotencyKey),
+  ],
+);
+
+export type FlowWebhookDeliveryRow = typeof flowWebhookDeliveries.$inferSelect;

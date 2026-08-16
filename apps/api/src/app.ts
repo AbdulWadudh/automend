@@ -8,6 +8,7 @@ import { createAuthProviderRoutes } from "./routes/auth-providers";
 import { createConnectionRoutes } from "./routes/connections";
 import { createFlowRoutes } from "./routes/flows";
 import { createHealthRoutes } from "./routes/health";
+import { createHookRoutes } from "./routes/hooks";
 
 export function createApp(deps: ApiDependencies): Hono {
   const app = new Hono();
@@ -38,6 +39,9 @@ export function createApp(deps: ApiDependencies): Hono {
   app.route(config.http.routes.authProviders, createAuthProviderRoutes(deps));
   app.route(config.http.routes.flows, createFlowRoutes(deps));
   app.route(config.http.routes.connections, createConnectionRoutes(deps));
+  // Deliberately outside the session middleware: the caller is somebody else's server. See the
+  // module for why the URL is what stands in for authentication.
+  app.route(config.http.routes.hooks, createHookRoutes(deps));
 
   app.notFound(notFoundHandler);
   app.onError(createErrorHandler(deps.logger));
