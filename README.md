@@ -92,13 +92,45 @@ Running the apps from Docker means rebuilding on every change. For an iterative 
 infrastructure in Docker and the apps on the host:
 
 ```bash
-docker compose up -d postgres redis
-bun run db:migrate      # reads DATABASE_URL from your shell / .env
+bun run dev             # everything below, in one command
+```
+
+`bun run dev` runs `dev:up` first and then starts all three apps in parallel. `dev:up` starts the
+Docker engine if it is not already running, waits for it, brings up Postgres and Redis, waits for
+their healthchecks, and applies migrations — so a cold machine needs one command, not four. Run the
+pieces separately when you want only some of them:
+
+```bash
+bun run dev:up                # Docker engine + Postgres + Redis + migrations
+bun run dev:up --all          # the same, plus the api, worker and web containers
+bun run dev:up --free-ports   # terminate whatever holds 3000/3002/5173, without asking
 
 bun run dev:api         # http://localhost:3000  (hot reload)
 bun run dev:worker      # consumes flow-executions (hot reload)
 bun run dev:web         # http://localhost:5173  (Vite HMR, proxies /api to :3000)
 ```
+
+`dev:up` is safe to re-run — every step is a no-op when it is already done. On Linux it will not
+start the daemon for you, because `dockerd` is a system service rather than an app and starting it
+needs privileges a project script should not take; it tells you the command instead.
+
+### Port already in use
+
+Before handing over to the apps, `dev:up` checks the ports they bind and names what is holding
+each one, rather than letting one of three parallel processes die with a bare `EADDRINUSE`:
+
+```
+▸ Host ports
+  port 3000 (api) is held by bun pid 36168
+  port 5173 (web dev server) is held by node pid 22880
+
+  Terminate them and continue? [y/N]
+```
+
+Answering `y` sends SIGTERM and waits for the port to actually come free before continuing. It
+never kills anything unprompted — pass `--free-ports` to skip the question, and note that when the
+answer cannot be typed (a pipe, or CI) it declines and exits non-zero rather than guessing. Ports
+overridden in `.env` are checked instead of the defaults.
 
 There is one `.env` for the whole monorepo, at the repo root. Bun only auto-loads `.env` from the
 current working directory, and these scripts run with the cwd set to their own workspace — so each
@@ -110,6 +142,9 @@ Nothing to export by hand.
 | Command                    | What it does                                                   |
 | -------------------------- | -------------------------------------------------------------- |
 | `bun install`              | Install every workspace's dependencies                         |
+| `bun run dev`              | `dev:up`, then all three apps with hot reload                  |
+| `bun run dev:up`           | Docker engine + Postgres + Redis + migrations (`--all` for the whole stack) |
+| `bun run dev:down`         | Stop the compose stack                                         |
 | `bun run typecheck`        | `tsc --noEmit` across all workspaces                           |
 | `bun test`                 | Unit tests (`bun test`)                                        |
 | `bun run check`            | Biome lint + format check                                      |

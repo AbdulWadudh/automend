@@ -8,7 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "bun run --filter '*' dev",
+    "dev": "bun run dev:up && bun run --filter '*' dev",
+    "dev:up": "bun run scripts/dev-up.ts",
+    "dev:down": "docker compose down",
     "dev:api": "bun run --cwd apps/api dev",
     "dev:worker": "bun run --cwd apps/worker dev",
     "dev:web": "bun run --cwd apps/web dev",

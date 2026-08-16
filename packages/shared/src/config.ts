@@ -407,6 +407,7 @@ export const config = {
   localDev: {
     host: LOCAL_HOST,
     postgres: {
+      serviceName: LOCAL_POSTGRES_SERVICE,
       image: LOCAL_POSTGRES_IMAGE,
       containerPort: POSTGRES_CONTAINER_PORT,
       user: LOCAL_POSTGRES_USER,
@@ -415,8 +416,40 @@ export const config = {
       dataPath: LOCAL_POSTGRES_DATA_PATH,
     },
     redis: {
+      serviceName: LOCAL_REDIS_SERVICE,
       image: LOCAL_REDIS_IMAGE,
       containerPort: REDIS_CONTAINER_PORT,
+    },
+
+    /**
+     * Ports `bun run dev` binds on the host, so it can say which app is blocked rather than
+     * letting one of three parallel processes die with a bare EADDRINUSE.
+     *
+     * `envVar` is how a deployment moves the port; the Vite dev server has none, because the web
+     * app reads `services.web.devServerPort` from here directly.
+     */
+    hostPorts: [
+      { label: "api", defaultPort: API_PORT, envVar: "API_PORT" },
+      { label: "worker health", defaultPort: WORKER_HEALTH_PORT, envVar: "WORKER_HEALTH_PORT" },
+      { label: "web dev server", defaultPort: WEB_DEV_PORT, envVar: null },
+    ],
+
+    docker: {
+      /** What `bun run dev:up` starts. The apps run on the host, so only their backing stores. */
+      dependencyServices: [LOCAL_POSTGRES_SERVICE, LOCAL_REDIS_SERVICE],
+      /**
+       * How to start the engine when it is not already running.
+       *
+       * Linux is deliberately absent: there `dockerd` is a system service rather than an app, and
+       * starting it needs privileges this script must not take. The script says so instead.
+       */
+      desktopLaunchers: {
+        win32: ["C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"],
+        darwin: ["open", "-a", "Docker"],
+      },
+      /** Docker Desktop routinely takes over a minute from launch to a responsive engine. */
+      engineReadyTimeoutMs: 180_000,
+      enginePollIntervalMs: 2_000,
     },
     /**
      * Two views of the same local services.
