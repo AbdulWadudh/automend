@@ -288,13 +288,25 @@ The Dragonfly-specific configuration below is *not* optional, and both parts mus
 - **Descriptive names over comments.** `calculateRetryDelayMs()` beats `calc()` with a comment.
   Reserve comments for *why*, not *what* (e.g., "retry with jitter to avoid thundering herd on
   Redis reconnect", not "loop over items").
-- **Do not comment code that does the expected thing.** A comment is earned only when the code
-  departs from what a competent reader would assume: a workaround, a constraint imposed from
-  outside (a library, a spec, a platform), a deliberate deviation from the obvious approach, a
-  placeholder that must change, or a trap that would otherwise be re-introduced. If a reader
-  would guess right without the comment, delete the comment. Restating the code, narrating a
-  section, or explaining a well-known pattern is noise — it ages badly and hides the comments
-  that actually matter.
+- **Comments are rare. The default is none.** A comment is earned only when the code departs from
+  what a competent reader would assume: a workaround, a constraint imposed from outside (a library,
+  a spec, a platform), a deliberate deviation from the obvious approach, a placeholder that must
+  change, or a trap that would otherwise be re-introduced. If a reader would guess right without
+  the comment, there is no comment. Restating the code, narrating a section, or explaining a
+  well-known pattern is noise — it ages badly and hides the few comments that matter.
+
+  Concretely, and these are the habits to break:
+
+  - **No file-header essays.** A module does not need a paragraph explaining what it is for; its
+    name and its exports do that. At most one short line, and only when the file's *boundary* is
+    surprising (why this is separate from its neighbour).
+  - **No doc block per exported function.** Name the function well instead. A function gets a
+    comment only if calling it correctly requires knowing something the signature does not say.
+  - **No commentary on config values, schema fields, or types** unless the value itself is a trap
+    (a magic number fixed by an external spec, a field whose absence is deliberate).
+  - **One reason, one sentence.** When a comment is earned, it says the reason and stops. If it
+    runs past two or three lines, it is an argument, not a comment — cut it.
+  - Prose density is a review criterion: a diff where comments outnumber statements gets sent back.
 - **No God files.** If a route file, service, or component exceeds ~300 lines, split it.
 - **Errors are typed, not stringly-typed.** Use the small domain error vocabulary in
   `packages/shared/src/errors.ts` rather than throwing raw strings or generic `Error`. Per the
