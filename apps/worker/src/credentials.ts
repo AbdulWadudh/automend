@@ -12,7 +12,7 @@
  *   hands an expired access token to a kit.
  */
 
-import type { Auth } from "@automend/auth";
+import { type Auth, toConnectionProviderId } from "@automend/auth";
 import { type Database, findConnectionForTenant, findConnectionSecret } from "@automend/db";
 import { findKit } from "@automend/kits";
 import { type FlowDefinition, stepExecutionError } from "@automend/shared";
@@ -111,9 +111,19 @@ async function resolveOne(
     throw stepExecutionError("the connected account is no longer linked");
   }
 
+  /**
+   * Better-Auth's provider id, not ours.
+   *
+   * A connection row stores the *connector* id — `google` — because that is the identifier the
+   * catalogue, the builder and the flow definition all use. Better-Auth holds the linked account under
+   * the suffixed one, `google-connector`, so that authorising Google for automation cannot widen what
+   * signing in with Google is allowed to do. Asking for a token under the bare id fails with
+   * "Provider google is not supported", because the worker registers no sign-in providers at all — and
+   * in a process that did, it would resolve the *sign-in* account, whose scopes cannot send an email.
+   */
   const result = await auth.api.getAccessToken({
     body: {
-      providerId: connection.providerId,
+      providerId: toConnectionProviderId(connection.providerId),
       accountId: connection.accountId,
       userId: connection.accountUserId,
     },

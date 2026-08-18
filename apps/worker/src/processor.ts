@@ -135,7 +135,19 @@ export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExec
           stepId: credentials.stepId,
         },
       });
-      logger.warn({ runId, step: credentials.stepName }, "run failed: a credential could not be resolved");
+      // The reason, not just that there was one. It is persisted on the run for the UI to show, but a
+      // log line without it means the telemetry backend records that a run failed and nothing about why
+      // — which is the one question anybody searching for it has.
+      logger.warn(
+        {
+          runId,
+          flowId: existing.flowId,
+          stepId: credentials.stepId,
+          step: credentials.stepName,
+          reason: credentials.message,
+        },
+        "run failed: a credential could not be resolved",
+      );
 
       return;
     }
