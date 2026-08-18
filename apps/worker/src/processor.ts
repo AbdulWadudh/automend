@@ -23,7 +23,13 @@ import {
   findStepsMissingConnections,
   validateDefinitionAgainstRegistry,
 } from "@automend/kits";
-import { API_ERROR_CODES, type FlowExecutionJob, flowExecutionJobSchema, type RunError } from "@automend/shared";
+import {
+  API_ERROR_CODES,
+  type FlowExecutionJob,
+  type FlowExecutionResult,
+  flowExecutionJobSchema,
+  type RunError,
+} from "@automend/shared";
 import { type Job, UnrecoverableError } from "bullmq";
 import { resolveRunCredentials } from "./credentials";
 import type { WorkerDependencies } from "./dependencies";
@@ -31,7 +37,12 @@ import { executeFlow } from "./engine/executor";
 import { buildEngineLimits } from "./engine/protocol";
 import { createStepHost } from "./engine/step-host";
 
-export type FlowExecutionProcessor = (job: Job) => Promise<void>;
+/**
+ * Returns a summary rather than nothing, because that summary is the *only* thing the queue can tell you about a
+ * run. BullMQ keeps it as the job's `returnvalue`, which is what the queue dashboard shows — and without it every
+ * run, whatever happened inside it, read as an identical `returnValue: null`.
+ */
+export type FlowExecutionProcessor = (job: Job) => Promise<FlowExecutionResult>;
 
 /**
  * A payload that does not match the schema will never match it on a retry, so it is rejected as unrecoverable
@@ -58,7 +69,7 @@ function validationError(message: string): RunError {
 export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExecutionProcessor {
   const { db, logger } = deps;
 
-  return async function processFlowExecution(job: Job): Promise<void> {
+  return async function processFlowExecution(job: Job): Promise<FlowExecutionResult> {
     const payload = parseJobPayload(job);
     const runId = payload.executionId;
 
@@ -69,7 +80,7 @@ export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExec
       // the same absence, so the job is finished rather than failed.
       logger.info({ runId }, "run no longer exists, nothing to execute");
 
-      return;
+      return { runId, status: "skipped", reason: "the run no longer exists" };
     }
 
     if (existing.status !== "pending") {
@@ -77,7 +88,7 @@ export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExec
       // is the one thing this whole design exists to prevent.
       logger.info({ runId, status: existing.status }, "run is not pending, leaving it alone");
 
-      return;
+      return { runId, status: "skipped", reason: `the run is already ${existing.status}` };
     }
 
     const claimed = await startFlowRun(db, runId);
@@ -87,7 +98,7 @@ export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExec
       // reason the claim is a conditional update rather than a read followed by a write.
       logger.info({ runId }, "another worker claimed this run");
 
-      return;
+      return { runId, status: "skipped", reason: "another worker claimed this run" };
     }
 
     const definition = claimed.definitionSnapshot;
@@ -101,7 +112,7 @@ export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExec
       });
       logger.warn({ runId, issues: issues.length }, "run failed: its definition no longer validates");
 
-      return;
+      return { runId, status: "failed", reason: describeDefinitionIssues(issues) };
     }
 
     const missing = findStepsMissingConnections(definition);
@@ -115,7 +126,7 @@ export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExec
       });
       logger.warn({ runId }, "run failed: a step has no connection");
 
-      return;
+      return { runId, status: "failed", reason: describeDefinitionIssues(missing) };
     }
 
     const credentials = await resolveRunCredentials({
@@ -149,7 +160,13 @@ export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExec
         "run failed: a credential could not be resolved",
       );
 
-      return;
+      return {
+        runId,
+        status: "failed",
+        reason: credentials.message,
+        stepId: credentials.stepId,
+        steps: definition.steps.length,
+      };
     }
 
     const run = {
@@ -187,6 +204,8 @@ export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExec
       if (outcome.status === "failed") {
         throw new Error(outcome.error?.message ?? "the flow failed");
       }
+
+      return { runId, status: "succeeded", steps: definition.steps.length };
     } catch (error) {
       // Only reached for something the executor did not already record — the engine dying, or the database going
       // away mid-run. Settling here means a run is never left in `running` with nothing to explain it.
