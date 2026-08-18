@@ -43,6 +43,13 @@
       "when": 1786880709590,
       "tag": "0005_shiny_korath",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787079045424,
+      "tag": "0006_red_vindicator",
+      "breakpoints": true
     }
   ]
 }

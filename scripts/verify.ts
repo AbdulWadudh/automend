@@ -19,6 +19,7 @@
  */
 
 import { config } from "../packages/shared/src/config";
+import { runDatabaseTests } from "./verify/database-tests";
 import { isDockerRunning, run } from "./verify/docker";
 import { replayMigrations } from "./verify/migration-replay";
 
@@ -89,6 +90,14 @@ const gates: Gate[] = [
     run: () => expectSuccess("run `bun run auth:schema`", ["bun", "run", "auth:schema:check"]),
   },
   { name: "compose files resolve", run: checkComposeFiles },
+  {
+    // `bun test` above skips these, because they need a database and most runs have none. Without this
+    // gate the guarantees they check — one run per retried trigger, one side effect per step — would be
+    // verified only on whichever laptop happened to have Postgres running.
+    name: "run persistence against a real database",
+    slow: true,
+    run: runDatabaseTests,
+  },
   {
     name: "container images build",
     slow: true,

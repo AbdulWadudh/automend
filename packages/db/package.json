@@ -9,6 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "db:generate": "bun --env-file=../../.env run drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env run src/migrate.ts",
     "db:studio": "bun --env-file=../../.env run drizzle-kit studio"

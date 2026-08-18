@@ -153,6 +153,15 @@ const ENGINE_RUN_TIMEOUT_MS = 15 * SECONDS_PER_MINUTE * MS_PER_SECOND;
 /** Room for a delay step's own overhead, so the wait ends before the timeout fires rather than with it. */
 const DELAY_TIMEOUT_HEADROOM_MS = 10 * MS_PER_SECOND;
 
+/**
+ * How a flow can be started, named once.
+ *
+ * `config.kits.triggerStrategies` and `config.runs.sources` are the same list seen from two ends — a run's
+ * source *is* the strategy of the trigger that produced it — so writing it twice would let them drift into
+ * a run whose source no trigger could have caused.
+ */
+const TRIGGER_STRATEGIES = ["manual", "webhook", "polling", "cron"] as const;
+
 export const config = {
   appVersion: APP_VERSION,
 
@@ -564,7 +573,7 @@ export const config = {
      */
     propertyTypes: ["shortText", "longText", "number", "checkbox", "staticDropdown", "json"],
     /** How a trigger learns that something happened. */
-    triggerStrategies: ["manual", "webhook", "polling", "cron"],
+    triggerStrategies: TRIGGER_STRATEGIES,
     /**
      * The strategies this deployment can actually fire. `polling` and `cron` are absent until the
      * scheduler exists: the catalogue reports the rest unavailable so the builder can refuse them
@@ -646,6 +655,45 @@ export const config = {
     },
   },
 
+  /**
+   * Flow runs — one execution of a flow, and the journal of what each of its steps did.
+   *
+   * The status vocabulary is closed and the legal transitions between them live in `runs.ts`, because a
+   * run that goes from `succeeded` back to `running` is a bug the type system cannot catch on its own.
+   */
+  runs: {
+    statuses: ["pending", "running", "succeeded", "failed", "timedOut", "cancelled"],
+    /** A run exists before the worker picks it up: it is created in the same transaction as its outbox row. */
+    initialStatus: "pending",
+    /** Once a run reaches one of these it never changes again, which is what makes a retry safe to replay. */
+    terminalStatuses: ["succeeded", "failed", "timedOut", "cancelled"],
+
+    /**
+     * A step's own outcome. `skipped` is not a failure — it is a step the walk never reached, because a
+     * step before it failed and the author did not ask to continue.
+     */
+    stepStatuses: ["pending", "running", "succeeded", "failed", "skipped"],
+    terminalStepStatuses: ["succeeded", "failed", "skipped"],
+
+    /** What started a run. The same list as the trigger strategies, seen from the run's end. */
+    sources: TRIGGER_STRATEGIES,
+
+    /**
+     * BullMQ's retry policy for a flow execution job.
+     *
+     * Retries are safe *because* of the step journal: a retried job replays the output of every step that
+     * already succeeded rather than re-invoking it, so the third attempt at a flow does not send a third
+     * email. Without that journal this would have to be 1.
+     */
+    retry: {
+      attempts: 3,
+      backoffMs: 5 * MS_PER_SECOND,
+    },
+
+    /** How many runs the builder lists for a flow. Enough to find the one you just started. */
+    recentRuns: 50,
+  },
+
   database: {
     /** Kept small: many API and worker replicas share one Postgres. */
     apiMaxConnections: 10,
@@ -682,6 +730,32 @@ export const config = {
       name: "{flow-executions}",
       jobName: "execute-flow",
     },
+  },
+
+  /**
+   * The relay that drains `flow_run_outbox` onto the queue.
+   *
+   * Its own domain rather than a member of `config.queue`, because everything in there is a queue and
+   * `tests/config.test.ts` asserts as much — the outbox is what *feeds* a queue.
+   *
+   * An interval rather than a `LISTEN`: a row can be committed by any API replica, and polling one small
+   * partial index every second is cheaper than every replica holding a listener connection open. The
+   * latency it adds is bounded by the interval, and it applies to *starting* a run rather than to running
+   * one.
+   */
+  outbox: {
+    relayIntervalMs: MS_PER_SECOND,
+    /** Rows per pass. Small, because a pass holds row locks for its whole duration. */
+    batchSize: 50,
+    /**
+     * After this many failures a row stops being retried and is reported as stuck instead.
+     *
+     * Retrying forever would hide the one failure mode of this pattern that is invisible from outside: the
+     * run exists, it looks queued, and nothing will ever execute it.
+     */
+    maxAttempts: 10,
+    /** How long a published row is kept before pruning — long enough to answer "did that get queued?". */
+    keepPublishedForMs: SECONDS_PER_DAY * MS_PER_SECOND,
   },
 
   health: {
