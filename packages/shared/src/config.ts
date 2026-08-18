@@ -670,8 +670,12 @@ export const config = {
        *
        * The default is the safe one. A deployment that genuinely automates against a service on its
        * own network needs an override, which arrives with the guard that reads this.
+       *
+       * `blockedHostnames` holds names that are refused *whatever* that override says, so it is deliberately
+       * short: a cloud metadata endpoint has no legitimate use from a flow. `localhost` is absent on purpose —
+       * loopback is what the override is mostly *for*, and listing it here would have made the setting inert.
        */
-      blockedHostnames: ["localhost", "metadata.google.internal"],
+      blockedHostnames: ["metadata.google.internal", "metadata.goog"],
       allowPrivateNetworkByDefault: false,
     },
   },

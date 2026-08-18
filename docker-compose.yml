@@ -138,6 +138,18 @@ services:
       REDIS_URL: ${REDIS_URL_FROM_CONTAINER}
       WORKER_HEALTH_PORT: ${WORKER_HEALTH_PORT}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY}
+      # The engine resolves a connection's credentials itself, so the worker needs the same auth values as the
+      # api — not copies. Configured differently it would refresh nothing and decrypt nothing.
+      AUTH_SECRET: ${AUTH_SECRET}
+      SECRETS_KEY: ${SECRETS_KEY}
+      AUTH_BASE_URL: ${AUTH_BASE_URL:-http://localhost:5173}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      ENGINE_ALLOW_PRIVATE_NETWORK: ${ENGINE_ALLOW_PRIVATE_NETWORK}
     ports:
       - "${WORKER_HEALTH_PORT}:${WORKER_HEALTH_PORT}"
     depends_on:

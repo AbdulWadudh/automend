@@ -15,6 +15,19 @@ const REQUIRED_API_ENV = {
   SECRETS_KEY: "k".repeat(config.secrets.keyLengthBytes),
 };
 
+/**
+ * The same for the worker, which is a longer list than it used to be.
+ *
+ * The engine resolves each step's credentials itself, so the worker needs the auth values the API has — the same
+ * values, not copies of them. Given different ones it would refresh no OAuth token and decrypt no stored secret.
+ */
+const REQUIRED_WORKER_ENV = {
+  DATABASE_URL: VALID_DATABASE_URL,
+  REDIS_URL: VALID_REDIS_URL,
+  AUTH_SECRET: VALID_AUTH_SECRET,
+  SECRETS_KEY: "k".repeat(config.secrets.keyLengthBytes),
+};
+
 function captureErrorMessage(load: () => unknown): string {
   try {
     load();
@@ -118,24 +131,41 @@ describe("loadApiEnv", () => {
 
 describe("loadWorkerEnv", () => {
   test("defaults concurrency and the health port", () => {
-    const env = loadWorkerEnv({
-      DATABASE_URL: VALID_DATABASE_URL,
-      REDIS_URL: VALID_REDIS_URL,
-    });
+    const env = loadWorkerEnv(REQUIRED_WORKER_ENV);
 
     expect(env.WORKER_CONCURRENCY).toBe(config.services.worker.defaultConcurrency);
     expect(env.WORKER_HEALTH_PORT).toBe(config.services.worker.defaultHealthPort);
   });
 
   test("rejects a concurrency of zero", () => {
-    const message = captureErrorMessage(() =>
-      loadWorkerEnv({
-        DATABASE_URL: VALID_DATABASE_URL,
-        REDIS_URL: VALID_REDIS_URL,
-        WORKER_CONCURRENCY: "0",
-      }),
-    );
+    const message = captureErrorMessage(() => loadWorkerEnv({ ...REQUIRED_WORKER_ENV, WORKER_CONCURRENCY: "0" }));
 
     expect(message).toContain("WORKER_CONCURRENCY");
+  });
+
+  /**
+   * The default matters more than most: with this on, an HTTP step's URL can come from a flow's *data*, so whoever
+   * sends a webhook chooses where the worker connects — Postgres, Redis, or the cloud metadata service.
+   */
+  test("refuses private network access unless a deployment asks for it", () => {
+    expect(loadWorkerEnv(REQUIRED_WORKER_ENV).ENGINE_ALLOW_PRIVATE_NETWORK).toBe(
+      config.engine.http.allowPrivateNetworkByDefault,
+    );
+    expect(config.engine.http.allowPrivateNetworkByDefault).toBe(false);
+  });
+
+  test("private network access can be turned on explicitly", () => {
+    const env = loadWorkerEnv({ ...REQUIRED_WORKER_ENV, ENGINE_ALLOW_PRIVATE_NETWORK: "true" });
+
+    expect(env.ENGINE_ALLOW_PRIVATE_NETWORK).toBe(true);
+  });
+
+  /** Without them the engine cannot resolve a credential, so starting up and failing later would be worse. */
+  test("will not start without the values it needs to resolve a connection", () => {
+    const withoutSecretsKey = { ...REQUIRED_WORKER_ENV, SECRETS_KEY: undefined };
+    const withoutAuthSecret = { ...REQUIRED_WORKER_ENV, AUTH_SECRET: undefined };
+
+    expect(captureErrorMessage(() => loadWorkerEnv(withoutSecretsKey))).toContain("SECRETS_KEY");
+    expect(captureErrorMessage(() => loadWorkerEnv(withoutAuthSecret))).toContain("AUTH_SECRET");
   });
 });

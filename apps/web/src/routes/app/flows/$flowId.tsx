@@ -18,6 +18,7 @@ import { useFlowShortcuts } from "@/components/flows/use-flow-shortcuts";
 import { WebhookDrawer } from "@/components/flows/webhook-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { connectionQueryKeys, listConnections } from "@/lib/connections-api";
 import { duplicateStep, isTrigger, removeStep } from "@/lib/flow-editor";
 import { flowQueryKeys, getFlow, listDeliveries, updateFlow } from "@/lib/flows-api";
 import { fetchKitCatalogue, findTriggerSummary, kitQueryKeys } from "@/lib/kits-api";
@@ -123,6 +124,20 @@ function FlowBuilder({ flow }: { flow: Flow }) {
   const catalogue = catalogueQuery.data;
 
   /**
+   * The workspace's connections, so a step can be pointed at the account it acts as.
+   *
+   * Loaded here rather than inside the inspector because the palette and the canvas need them too: a step that
+   * needs a connection is given one the moment it is created, when there is only one it could be. Deciding that
+   * when the panel opens instead would mean looking at a node changed the flow.
+   */
+  const connectionsQuery = useQuery({
+    queryKey: connectionQueryKeys.list(),
+    queryFn: ({ signal }) => listConnections(signal),
+  });
+
+  const connections = connectionsQuery.data ?? [];
+
+  /**
    * Whether the trigger listens on a URL, and if so at which path.
    *
    * `draft` and `saved` are two different things, and conflating them is what made a freshly switched trigger
@@ -203,7 +218,9 @@ function FlowBuilder({ flow }: { flow: Flow }) {
   });
 
   return (
-    <div className="flex flex-1 flex-col">
+    // `min-h-0` so the row below can shrink and hand its overflow to the panels inside it, rather than growing and
+    // pushing the whole page taller.
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b px-6 py-3">
         <Link to={routes.flows} className="text-muted-foreground text-sm hover:text-foreground">
           ← Flows
@@ -220,6 +237,7 @@ function FlowBuilder({ flow }: { flow: Flow }) {
         <StepPalette
           definition={definition}
           catalogue={catalogue}
+          connections={connections}
           onChange={setDefinition}
           onSelect={setSelectedNodeId}
         />
@@ -246,12 +264,15 @@ function FlowBuilder({ flow }: { flow: Flow }) {
         </p>
       )}
 
-      <div className="flex flex-1 flex-col lg:flex-row">
-        <div className="h-[60vh] flex-1 lg:h-auto">
+      {/* Each child owns its own scrolling. Below `lg` the three stack and this column scrolls between them,
+          because a 26rem panel beside a canvas on a phone is not a layout. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+        <div className="h-[60vh] flex-1 lg:h-auto lg:min-h-0">
           <FlowCanvas
             definition={definition}
             selectedNodeId={selectedNodeId}
             catalogue={catalogue}
+            connections={connections}
             onChange={setDefinition}
             onSelect={setSelectedNodeId}
           />
@@ -265,6 +286,7 @@ function FlowBuilder({ flow }: { flow: Flow }) {
           selectedNodeId={selectedNodeId}
           catalogue={catalogue}
           catalogueError={catalogueQuery.error}
+          connections={connections}
           onRetryCatalogue={() => void catalogueQuery.refetch()}
           onChange={setDefinition}
           onSelect={setSelectedNodeId}

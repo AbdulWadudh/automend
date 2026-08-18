@@ -16,6 +16,7 @@ import {
   type KitProperty,
   kitCatalogueSchema,
 } from "@automend/kit-framework";
+import type { Connection } from "@automend/shared";
 import { requestApi } from "./api";
 
 const KITS_PATH = "/kits";
@@ -116,6 +117,54 @@ export function listTriggerChoices(catalogue: KitCatalogue): TriggerChoice[] {
       strategy: trigger.strategy,
     })),
   );
+}
+
+/**
+ * The workspace's connections that could serve this kit.
+ *
+ * Filtered by connector rather than listed in full: a Slack connection is not a thing a Gmail step could use, and
+ * offering it would be an invitation to pick the wrong one.
+ */
+export function listUsableConnections(connections: readonly Connection[], kit: KitCatalogueEntry): Connection[] {
+  if (!kit.auth) {
+    return [];
+  }
+
+  return connections.filter((connection) => connection.providerId === kit.auth?.connectorId);
+}
+
+/**
+ * The connection to use without asking, when there is only one it could be.
+ *
+ * Most workspaces connect a service once. Making somebody choose from a list of one is a step that teaches them
+ * nothing and can only be got wrong by leaving it unset — so a single candidate is selected on the author's
+ * behalf, and anything else is a question worth asking.
+ *
+ * Returns undefined when there are none or several, which are the two cases where a choice is real.
+ */
+export function pickDefaultConnection(
+  connections: readonly Connection[],
+  kit: KitCatalogueEntry | undefined,
+): string | undefined {
+  if (!kit?.auth) {
+    return undefined;
+  }
+
+  const usable = listUsableConnections(connections, kit);
+
+  return usable.length === 1 ? usable[0]?.id : undefined;
+}
+
+/**
+ * How a connection reads in a picker.
+ *
+ * The account it belongs to, because that is the thing an author is actually choosing between — two Gmail
+ * connections differ by mailbox, and their display names are whatever somebody typed.
+ */
+export function describeConnection(connection: Connection): string {
+  const account = connection.accountEmail ?? connection.accountName;
+
+  return account ? `${connection.displayName} · ${account}` : connection.displayName;
 }
 
 /**

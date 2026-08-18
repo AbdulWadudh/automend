@@ -141,6 +141,41 @@ const webServerEnvSchema = baseEnvSchema.extend({
 });
 
 const workerEnvSchema = baseEnvSchema.extend({
+  /**
+   * The same variables the API reads, not copies of them.
+   *
+   * Resolving a connection's OAuth token goes through Better-Auth, which refreshes it against the provider — and
+   * refreshing needs the client pair, the signing secret the tokens were sealed with, and the base URL the
+   * redirect URIs were registered under. A worker given different values from the API would decrypt nothing.
+   */
+  AUTH_SECRET: z
+    .string()
+    .min(config.auth.secretMinLength, `AUTH_SECRET must be at least ${config.auth.secretMinLength} characters`),
+  /**
+   * The same variable the API reads, with the same default — not a second name for it.
+   *
+   * Better-Auth builds provider redirect URIs from this, and a refresh that presents a different one is refused, so
+   * the worker and the API have to agree. Defaulted rather than required so a laptop needs no extra configuration.
+   */
+  AUTH_BASE_URL: connectionUrlSchema("AUTH_BASE_URL", config.env.urlSchemes.api).default(config.localDev.urls.webDev),
+  GOOGLE_CLIENT_ID: optionalSecretSchema,
+  GOOGLE_CLIENT_SECRET: optionalSecretSchema,
+  SLACK_CLIENT_ID: optionalSecretSchema,
+  SLACK_CLIENT_SECRET: optionalSecretSchema,
+  DISCORD_CLIENT_ID: optionalSecretSchema,
+  DISCORD_CLIENT_SECRET: optionalSecretSchema,
+  /** Decrypts token connections. The same key the API sealed them with. */
+  SECRETS_KEY: z.string().min(1, "SECRETS_KEY is required — generate one with: openssl rand -base64 32"),
+  /**
+   * Lets flows call private, loopback and internal addresses.
+   *
+   * Off by default and deliberately so: an HTTP step's URL can come from a flow's *data*, so whoever sends a
+   * webhook would otherwise choose where the worker connects — reaching Postgres, Redis, or anything else on the
+   * network. Turn it on only for a deployment that genuinely automates against a service on its own network.
+   * Link-local (`169.254.0.0/16`, `fe80::/10`) stays refused either way, because that is where cloud instance
+   * metadata — and the machine's own credentials — live.
+   */
+  ENGINE_ALLOW_PRIVATE_NETWORK: booleanSchema.default(config.engine.http.allowPrivateNetworkByDefault),
   DATABASE_URL: databaseUrlSchema,
   REDIS_URL: redisUrlSchema,
   WORKER_HEALTH_PORT: portSchema.default(config.services.worker.defaultHealthPort),

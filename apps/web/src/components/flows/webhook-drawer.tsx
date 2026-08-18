@@ -105,7 +105,9 @@ export function WebhookDrawer({ flowId, savedPath, open, onOpenChange }: Webhook
   return (
     <aside
       aria-label="Test this webhook"
-      className="flex w-full shrink-0 flex-col border-t bg-card/40 lg:h-full lg:w-[26rem] lg:border-t-0 lg:border-l xl:w-[30rem]"
+      // `lg:min-h-0` alongside `lg:h-full`: without it this flex child will not shrink below its content, so the
+      // inner `overflow-y-auto` has nothing to overflow within and the page scrolls instead of the drawer.
+      className="flex w-full shrink-0 flex-col border-t bg-card/40 lg:h-full lg:min-h-0 lg:w-[26rem] lg:border-t-0 lg:border-l xl:w-[30rem]"
     >
       <header className="flex items-center gap-2 border-b px-5 py-4">
         <div className="min-w-0 flex-1 space-y-1">

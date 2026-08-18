@@ -1,18 +1,29 @@
 import { config } from "@automend/shared";
-import { Worker } from "bullmq";
+import { Queue, Worker } from "bullmq";
 import { env, serviceConfig } from "./config";
 import { createWorkerDependencies } from "./dependencies";
 import { startHealthServer } from "./health-server";
+import { createOutboxRelay } from "./outbox-relay";
 import { createFlowExecutionProcessor } from "./processor";
 
 const queueName = config.queue.flowExecutions.name;
 
 const deps = createWorkerDependencies();
 
-const worker = new Worker(queueName, createFlowExecutionProcessor(deps.logger), {
+const worker = new Worker(queueName, createFlowExecutionProcessor(deps), {
   connection: deps.redis,
   concurrency: env.WORKER_CONCURRENCY,
 });
+
+/**
+ * The other half of the transactional outbox.
+ *
+ * Lives in the worker rather than the API because the API's job is to answer a request and stop; a relay needs a
+ * process that stays running. Every worker replica relays, and `FOR UPDATE SKIP LOCKED` is what makes that safe
+ * rather than a source of duplicate jobs.
+ */
+const queue = new Queue(queueName, { connection: deps.redis });
+const outboxRelay = createOutboxRelay({ db: deps.db, queue, logger: deps.logger });
 
 worker.on("completed", (job) => {
   deps.logger.info({ jobId: job.id, queue: queueName }, "job completed");
@@ -49,8 +60,11 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   deps.logger.info({ signal }, "shutting down worker");
 
   try {
+    // Stopped first, so nothing new is queued while the in-flight runs are being allowed to finish.
+    outboxRelay.stop();
     await healthServer.stop();
     await worker.close();
+    await queue.close();
     await deps.closeClients();
     process.exit(0);
   } catch (error) {

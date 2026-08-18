@@ -180,6 +180,50 @@
     /* In-page anchors land under the sticky header without this. */
     scroll-padding-top: 5rem;
   }
+
+  /*
+   * Thin scrollbars, in the app's own colours.
+   *
+   * The platform default is around 15px wide and painted by the operating system, so on this dark theme it arrives
+   * as a light grey slab — the same problem a native `<select>` has, for the same reason. The builder has three
+   * scroll containers side by side, and three OS scrollbars across a 26rem panel is most of a column of chrome.
+   *
+   * Declared twice because no single property covers both engines: `scrollbar-width` and `scrollbar-color` are the
+   * standard (Firefox, and Chromium 121+), and the `::-webkit-scrollbar` pseudo-elements are what older WebKit
+   * reads. A browser that understands neither keeps its own scrollbar, which is a fine outcome.
+   *
+   * The thumb is `border` rather than something dimmer so it stays visible against `muted` — a scrollbar nobody can
+   * find is worse than a thick one. It is not the only indication of scrollability either: content is clipped
+   * mid-line at the boundary, which is the cue that survives the scrollbar being hidden entirely.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0.375rem;
+    height: 0.375rem;
+  }
+
+  /* Transparent rather than a colour, so a scrollbar does not draw a permanent stripe down a panel's edge. */
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+
+  /* Otherwise WebKit draws a small square where a vertical and a horizontal bar meet. */
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

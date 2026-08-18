@@ -135,6 +135,20 @@ services:
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
       DATABASE_URL: postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-automend}
       REDIS_URL: redis://:${SERVICE_PASSWORD_REDIS}@redis:6379/0
+      # The engine resolves each step's credentials itself, so the worker needs the same auth values as the api —
+      # the same values, not copies. Given different ones it would refresh nothing and decrypt nothing.
+      AUTH_SECRET: ${SERVICE_PASSWORD_64_AUTH}
+      SECRETS_KEY: ${SECRETS_KEY:?generate with: openssl rand -base64 32}
+      AUTH_BASE_URL: ${PUBLIC_WEB_URL:?set this to the address the browser uses}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      # Off unless a deployment genuinely automates against a service on its own network. An HTTP step's URL can
+      # come from a flow's data, so with this on whoever sends a webhook chooses where the worker connects.
+      ENGINE_ALLOW_PRIVATE_NETWORK: ${ENGINE_ALLOW_PRIVATE_NETWORK:-false}
       OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:?set this to your SigNoz collector base URL}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}

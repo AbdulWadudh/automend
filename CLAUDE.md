@@ -273,6 +273,21 @@ Each of these was a real defect shipped in this codebase, not a style preference
 - **Transient content goes in an overlay, not inline.** Revealing a value, showing a picker or
   confirming a detail must not resize the row it sits in: growing a row displaces every control
   beside it, and things that move under the pointer feel broken. Use a popover.
+- **The panel scrolls, never the page.** A region with more content than fits — a drawer, an
+  inspector, a sidebar, a dialog body — is its own scroll container. The document must not become
+  one on its behalf. Letting the page scroll to reveal a form field drags the header and the canvas
+  off-screen with it: the user asked to see the bottom of one panel and lost every other part of
+  the app to get there.
+
+  Concretely, and these are the two mistakes that cause it:
+
+  - A shell that owns the viewport is `h-dvh overflow-hidden`, **not** `min-h-dvh`. The latter grows
+    with its content, which is exactly how the document ends up scrolling.
+  - Every flex ancestor between that shell and the scroll container needs `min-h-0`. A flex child
+    defaults to `min-height: auto` and refuses to shrink below its content, so the descendant's
+    `overflow-y-auto` has nothing to overflow *within* and the overflow escapes upward. This is the
+    single most common reason a scroll container appears to do nothing, and adding `overflow-y-auto`
+    somewhere higher up is not the fix — it is the bug.
 - **Destructive confirmations keep their words.** An icon is fine shorthand for something you can
   undo by clicking again; it is the wrong shorthand for confirming something permanent.
 - **Colour comes from the existing palette, and never carries meaning alone.** The node accents in

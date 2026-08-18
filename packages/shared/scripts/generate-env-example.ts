@@ -138,9 +138,24 @@ const sections: EnvSection[] = [
   },
   {
     title: "Worker",
+    note: [
+      "The worker also reads AUTH_SECRET, SECRETS_KEY, AUTH_BASE_URL and the connector pairs above — the",
+      "same values as the API, not copies. It needs them to refresh a connection's OAuth token and to",
+      "decrypt a stored one; configured differently from the API it would decrypt nothing.",
+    ].join("\n# "),
     entries: [
       ["WORKER_HEALTH_PORT", services.worker.defaultHealthPort],
       ["WORKER_CONCURRENCY", services.worker.defaultConcurrency],
+      [
+        "ENGINE_ALLOW_PRIVATE_NETWORK",
+        String(config.engine.http.allowPrivateNetworkByDefault),
+        [
+          "Lets flows call private, loopback and internal addresses. An HTTP step's URL can come from a",
+          "flow's DATA, so with this on whoever sends a webhook chooses where the worker connects — reaching",
+          "Postgres, Redis or anything else on the network. Turn it on only to automate against a service on",
+          "your own network. Link-local (169.254.0.0/16) stays refused either way: that is cloud metadata.",
+        ].join("\n# "),
+      ],
     ],
   },
   {

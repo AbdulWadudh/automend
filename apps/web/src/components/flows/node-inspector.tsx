@@ -1,11 +1,13 @@
-import type { KitCatalogue } from "@automend/kit-framework";
+import type { KitCatalogue, KitCatalogueEntry } from "@automend/kit-framework";
 import {
   buildWebhookPath,
+  type Connection,
   config,
   type FlowDefinition,
   readTriggerText,
   type TemplateVariable,
 } from "@automend/shared";
+import { Link } from "@tanstack/react-router";
 import { CheckIcon, CopyIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,23 +21,30 @@ import {
   removeStep,
   renameNode,
   setStepAction,
+  setStepConnection,
   setStepContinueOnFailure,
   setStepInput,
   setTriggerAction,
+  setTriggerConnection,
   setTriggerInput,
 } from "@/lib/flow-editor";
 import {
   type ActionChoice,
   buildDefaultInput,
+  describeConnection,
   findActionTarget,
+  findKitEntry,
   findTriggerSummary,
   findTriggerTarget,
   listActionChoices,
   listTriggerChoices,
+  listUsableConnections,
+  pickDefaultConnection,
 } from "@/lib/kits-api";
 import { PropertyFields } from "./property-field";
 
 const { validation } = config;
+const { routes } = config.webClient;
 
 function Field({
   label,
@@ -194,6 +203,79 @@ function SelectGroupBlock({ label, children }: { label: string; children: ReactN
   );
 }
 
+/** The value the select uses for "act as nobody", since a Radix item cannot carry an empty value. */
+const NO_CONNECTION = "__none__";
+
+/**
+ * Which account this node acts as.
+ *
+ * Only rendered for a kit that needs credentials — most do not, and an empty "Connection" field on a `core.log`
+ * step would be a question with no answer.
+ *
+ * Three states, and each is a different situation rather than a variation of one:
+ *
+ * - **None connected.** Not a field at all: there is nothing to choose. It says what to do and links to where.
+ * - **Exactly one.** Shown, and already selected — chosen when the step was created, because making somebody pick
+ *   from a list of one teaches them nothing and can only be got wrong by leaving it blank.
+ * - **Several.** A real choice, labelled by the *account* rather than only the connection's name, because two
+ *   Gmail connections differ by mailbox and their names are whatever somebody typed.
+ */
+function ConnectionField({
+  kit,
+  connections,
+  selected,
+  idPrefix,
+  onChange,
+}: {
+  kit: KitCatalogueEntry;
+  connections: readonly Connection[];
+  selected: string | undefined;
+  idPrefix: string;
+  onChange: (connectionId: string | undefined) => void;
+}) {
+  if (!kit.auth) {
+    return null;
+  }
+
+  const usable = listUsableConnections(connections, kit);
+  const fieldId = `${idPrefix}-connection`;
+
+  if (usable.length === 0) {
+    return (
+      <Notice>
+        No {kit.displayName} account is connected yet, so this cannot run. Connect one under{" "}
+        <Link to={routes.connections} className="underline underline-offset-2">
+          Connections
+        </Link>
+        , then choose it here.
+      </Notice>
+    );
+  }
+
+  return (
+    <Field label="Connection" htmlFor={fieldId} hint={`Which ${kit.displayName} account this acts as.`}>
+      <Select
+        value={selected ?? NO_CONNECTION}
+        onValueChange={(value) => onChange(value === NO_CONNECTION ? undefined : value)}
+      >
+        <SelectTrigger id={fieldId} aria-invalid={selected === undefined || undefined}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {/* Offered so a choice can be undone. A step with none saves and fails at run time, which the notice
+              below the field says plainly rather than leaving to be discovered. */}
+          <SelectItem value={NO_CONNECTION}>Not chosen yet</SelectItem>
+          {usable.map((connection) => (
+            <SelectItem key={connection.id} value={connection.id}>
+              {describeConnection(connection)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
 export type NodeInspectorProps = {
   /** Needed for the webhook URL, which is built from the flow this node belongs to. */
   flowId: string;
@@ -206,13 +288,22 @@ export type NodeInspectorProps = {
   /** Undefined while it is still loading, so the panel can say so rather than rendering an empty form. */
   catalogue: KitCatalogue | undefined;
   catalogueError: Error | null;
+  /** The workspace's connections, so a step can be pointed at the account it acts as. */
+  connections: readonly Connection[];
   onRetryCatalogue: () => void;
   onChange: (definition: FlowDefinition) => void;
   onSelect: (nodeId: string | undefined) => void;
 };
 
+/**
+ * The panel is the scroll container, not the page.
+ *
+ * `lg:min-h-0` alongside `lg:h-full` is what makes that true: without it the panel's flex `min-height: auto`
+ * refuses to shrink below its content, the inner `overflow-y-auto` has nothing to overflow within, and the
+ * overflow escapes to the document — which scrolls the canvas and the header off-screen to show a form field.
+ */
 const PANEL_CLASS =
-  "flex w-full shrink-0 flex-col border-t bg-card/40 lg:h-full lg:w-[26rem] lg:border-t-0 lg:border-l xl:w-[30rem]";
+  "flex w-full shrink-0 flex-col border-t bg-card/40 lg:h-full lg:min-h-0 lg:w-[26rem] lg:border-t-0 lg:border-l xl:w-[30rem]";
 
 function Panel({ children }: { children: ReactNode }) {
   return (
@@ -240,6 +331,7 @@ export function NodeInspector({
   selectedNodeId,
   catalogue,
   catalogueError,
+  connections,
   onRetryCatalogue,
   onChange,
   onSelect,
@@ -337,6 +429,7 @@ export function NodeInspector({
           <TriggerSection
             flowId={flowId}
             catalogue={catalogue}
+            connections={connections}
             definition={definition}
             savedWebhookPath={savedWebhookPath}
             variables={variables}
@@ -346,6 +439,7 @@ export function NodeInspector({
           step && (
             <StepSection
               catalogue={catalogue}
+              connections={connections}
               definition={definition}
               step={step}
               variables={variables}
@@ -379,6 +473,7 @@ export function NodeInspector({
 function TriggerSection({
   flowId,
   catalogue,
+  connections,
   definition,
   savedWebhookPath,
   variables,
@@ -386,6 +481,7 @@ function TriggerSection({
 }: {
   flowId: string;
   catalogue: KitCatalogue;
+  connections: readonly Connection[];
   definition: FlowDefinition;
   savedWebhookPath: string | undefined;
   variables: TemplateVariable[];
@@ -415,6 +511,7 @@ function TriggerSection({
                 triggerName: choice.triggerName,
                 displayName: choice.displayName,
                 input: buildDefaultInput(choice.properties),
+                connectionId: pickDefaultConnection(connections, findKitEntry(catalogue, choice.kitId)),
               }),
             )
           }
@@ -437,13 +534,23 @@ function TriggerSection({
       )}
 
       {target && (
-        <PropertyFields
-          properties={target.properties}
-          idPrefix="trigger"
-          input={trigger.input}
-          variables={variables}
-          onChange={(name, value) => onChange(setTriggerInput(definition, name, value))}
-        />
+        <>
+          <ConnectionField
+            kit={target.kit}
+            connections={connections}
+            selected={trigger.connectionId}
+            idPrefix="trigger"
+            onChange={(connectionId) => onChange(setTriggerConnection(definition, connectionId))}
+          />
+
+          <PropertyFields
+            properties={target.properties}
+            idPrefix="trigger"
+            input={trigger.input}
+            variables={variables}
+            onChange={(name, value) => onChange(setTriggerInput(definition, name, value))}
+          />
+        </>
       )}
 
       {summary?.strategy === "webhook" && (
@@ -459,12 +566,14 @@ function TriggerSection({
 
 function StepSection({
   catalogue,
+  connections,
   definition,
   step,
   variables,
   onChange,
 }: {
   catalogue: KitCatalogue;
+  connections: readonly Connection[];
   definition: FlowDefinition;
   step: FlowDefinition["steps"][number];
   variables: TemplateVariable[];
@@ -472,7 +581,11 @@ function StepSection({
 }) {
   const choices = listActionChoices(catalogue);
   const target = findActionTarget(catalogue, step.kitId, step.actionName);
-  const needsConnection = target?.kit.auth !== null && step.connectionId === undefined;
+  /** Saveable without one — an unfinished step is a normal thing to have — but a run reaching it will fail. */
+  const needsConnection =
+    target?.kit.auth != null &&
+    step.connectionId === undefined &&
+    listUsableConnections(connections, target.kit).length > 0;
 
   return (
     <>
@@ -490,6 +603,7 @@ function StepSection({
                 actionName: choice.actionName,
                 displayName: choice.displayName,
                 input: buildDefaultInput(choice.properties),
+                connectionId: pickDefaultConnection(connections, findKitEntry(catalogue, choice.kitId)),
               }),
             )
           }
@@ -507,6 +621,14 @@ function StepSection({
         <>
           <p className="text-muted-foreground text-xs leading-relaxed">{target.description}</p>
 
+          <ConnectionField
+            kit={target.kit}
+            connections={connections}
+            selected={step.connectionId}
+            idPrefix={`step-${step.id}`}
+            onChange={(connectionId) => onChange(setStepConnection(definition, step.id, connectionId))}
+          />
+
           <PropertyFields
             properties={target.properties}
             idPrefix={`step-${step.id}`}
@@ -516,11 +638,8 @@ function StepSection({
           />
 
           {needsConnection && (
-            // The step saves without one — an unfinished step is a normal thing to have — but a run that reaches
-            // it will fail, so the panel says so while somebody is looking at it.
-            <Notice>
-              {target.kit.displayName} needs a connection before this step can run. Add one under Connections.
-            </Notice>
+            // Said while somebody is looking at the step, rather than left to a run that fails a minute later.
+            <Notice>Choose a {target.kit.displayName} connection above, or this step will fail when it runs.</Notice>
           )}
 
           <Field

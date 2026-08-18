@@ -1,5 +1,6 @@
 import type { KitCatalogue } from "@automend/kit-framework";
-import { config, type FlowDefinition } from "@automend/shared";
+// Aliased: React Flow exports its own `Connection` — an edge being drawn — and the two would collide.
+import { config, type FlowDefinition, type Connection as StoredConnection } from "@automend/shared";
 import {
   applyEdgeChanges,
   applyNodeChanges,
@@ -18,7 +19,14 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { addStep, connectNodes, disconnect, findNode, moveNode } from "@/lib/flow-editor";
 import { accentForKit, describeNode } from "@/lib/flow-kinds";
-import { type ActionChoice, buildDefaultInput, findActionTarget, findTriggerTarget } from "@/lib/kits-api";
+import {
+  type ActionChoice,
+  buildDefaultInput,
+  findActionTarget,
+  findKitEntry,
+  findTriggerTarget,
+  pickDefaultConnection,
+} from "@/lib/kits-api";
 import { type FlowCanvasNode, flowNodeTypes } from "./flow-node";
 import { type PickerAnchor, StepPicker } from "./step-picker";
 
@@ -123,6 +131,7 @@ export type FlowCanvasProps = {
   selectedNodeId: string | undefined;
   /** Undefined until it loads. The canvas draws either way; only the wording is less specific. */
   catalogue: KitCatalogue | undefined;
+  connections: readonly StoredConnection[];
   onChange: (definition: FlowDefinition) => void;
   onSelect: (nodeId: string | undefined) => void;
 };
@@ -134,7 +143,7 @@ export type FlowCanvasProps = {
  * only updated at the points where something has actually been decided: a node dropped, an edge
  * drawn, an edge removed. Everything in between is presentation.
  */
-function FlowCanvasInner({ definition, selectedNodeId, catalogue, onChange, onSelect }: FlowCanvasProps) {
+function FlowCanvasInner({ definition, selectedNodeId, catalogue, connections, onChange, onSelect }: FlowCanvasProps) {
   const [nodes, setNodes] = useState<FlowCanvasNode[]>(() => toCanvasNodes(definition, selectedNodeId, catalogue));
   const [edges, setEdges] = useState<Edge[]>(() => toCanvasEdges(definition));
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | undefined>(undefined);
@@ -224,6 +233,10 @@ function FlowCanvasInner({ definition, selectedNodeId, catalogue, onChange, onSe
           actionName: choice.actionName,
           displayName: choice.displayName,
           input: buildDefaultInput(choice.properties),
+          connectionId: pickDefaultConnection(
+            connections,
+            catalogue ? findKitEntry(catalogue, choice.kitId) : undefined,
+          ),
         },
         {
           position: pendingConnection.position,
@@ -236,7 +249,7 @@ function FlowCanvasInner({ definition, selectedNodeId, catalogue, onChange, onSe
       // Selected immediately, so its settings are already open in the inspector.
       onSelect(stepId);
     },
-    [definition, onChange, onSelect, pendingConnection],
+    [catalogue, connections, definition, onChange, onSelect, pendingConnection],
   );
 
   return (

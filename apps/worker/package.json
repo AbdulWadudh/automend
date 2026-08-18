@@ -11,7 +11,10 @@
     "preflight": "bun --env-file=../../.env run scripts/preflight.ts"
   },
   "dependencies": {
+    "@automend/auth": "workspace:*",
     "@automend/db": "workspace:*",
+    "@automend/kit-framework": "workspace:*",
+    "@automend/kits": "workspace:*",
     "@automend/shared": "workspace:*",
     "bullmq": "^5.63.0",
     "ioredis": "^5.9.0",

@@ -73,6 +73,13 @@ export type StepTarget = {
   /** The kit author's name for it, used as the node's initial name so a new node is never called "Step". */
   displayName: string;
   input: Record<string, unknown>;
+  /**
+   * The connection to act through, when the caller could tell without asking.
+   *
+   * Chosen here rather than in the inspector because a step should arrive usable. Deciding it when the panel opens
+   * would mean looking at a node changed the flow, which is a surprising thing for looking at something to do.
+   */
+  connectionId?: string;
 };
 
 export type TriggerTarget = {
@@ -80,6 +87,7 @@ export type TriggerTarget = {
   triggerName: string;
   displayName: string;
   input: Record<string, unknown>;
+  connectionId?: string;
 };
 
 export type AddStepOptions = {
@@ -111,6 +119,7 @@ export function addStep(
     kitId: target.kitId,
     actionName: target.actionName,
     input: target.input,
+    connectionId: target.connectionId,
     continueOnFailure: false,
   };
 
@@ -218,8 +227,9 @@ export function setStepAction(definition: FlowDefinition, stepId: string, target
     kitId: target.kitId,
     actionName: target.actionName,
     input: target.input,
-    // A connection belongs to the kit that needed it, so switching kit discards it.
-    connectionId: undefined,
+    // The old kit's connection is discarded — it belonged to a different service — and replaced by whatever the
+    // caller could decide for the new one.
+    connectionId: target.connectionId,
     name: keepOrName(current.name, target.displayName),
   }));
 }
@@ -242,7 +252,7 @@ export function setTriggerAction(definition: FlowDefinition, target: TriggerTarg
       kitId: target.kitId,
       triggerName: target.triggerName,
       input: target.input,
-      connectionId: undefined,
+      connectionId: target.connectionId,
       name: keepOrName(trigger.name, target.displayName),
     },
   };

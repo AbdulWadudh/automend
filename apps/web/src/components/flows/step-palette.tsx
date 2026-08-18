@@ -1,15 +1,23 @@
 import type { KitCatalogue } from "@automend/kit-framework";
-import { config, type FlowDefinition } from "@automend/shared";
+import { type Connection, config, type FlowDefinition } from "@automend/shared";
 import { PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { addStep } from "@/lib/flow-editor";
 import { iconForMember } from "@/lib/flow-kinds";
-import { type ActionChoice, buildDefaultInput, listActionChoices } from "@/lib/kits-api";
+import {
+  type ActionChoice,
+  buildDefaultInput,
+  findKitEntry,
+  listActionChoices,
+  pickDefaultConnection,
+} from "@/lib/kits-api";
 
 export type StepPaletteProps = {
   definition: FlowDefinition;
   catalogue: KitCatalogue | undefined;
+  /** So a step that needs a connection arrives with one, when there is only one it could be. */
+  connections: readonly Connection[];
   onChange: (definition: FlowDefinition) => void;
   onSelect: (nodeId: string) => void;
 };
@@ -21,7 +29,7 @@ export type StepPaletteProps = {
  * A menu now rather than one button per step. With four hardcoded kinds a row of buttons fitted; with the
  * catalogue it would grow with every kit installed and stop fitting on the first narrow screen.
  */
-export function StepPalette({ definition, catalogue, onChange, onSelect }: StepPaletteProps) {
+export function StepPalette({ definition, catalogue, connections, onChange, onSelect }: StepPaletteProps) {
   const isFull = definition.steps.length >= config.flows.maxSteps;
   const choices = catalogue ? listActionChoices(catalogue) : undefined;
 
@@ -31,6 +39,7 @@ export function StepPalette({ definition, catalogue, onChange, onSelect }: StepP
       actionName: choice.actionName,
       displayName: choice.displayName,
       input: buildDefaultInput(choice.properties),
+      connectionId: pickDefaultConnection(connections, catalogue ? findKitEntry(catalogue, choice.kitId) : undefined),
     });
 
     onChange(result.definition);
