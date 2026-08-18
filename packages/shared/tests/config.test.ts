@@ -87,6 +87,25 @@ describe("queue configuration", () => {
     }
   });
 
+  /**
+   * Retention is what the queue dashboard has to look at. `removeOnComplete: true` deleted every successful job
+   * the instant it finished, so a run that had plainly executed left nothing behind to inspect or re-run.
+   */
+  test("finished jobs are kept, and kept in bounded numbers", () => {
+    const { retention } = config.queue.flowExecutions;
+
+    expect(retention.completedJobs).toBeGreaterThan(0);
+    expect(retention.failedJobs).toBeGreaterThan(0);
+  });
+
+  test("more failures are kept than successes", () => {
+    // A completed job is history; a failed one is work somebody may still want to read or re-run, and it has to
+    // outlive the successes accumulating around it.
+    const { retention } = config.queue.flowExecutions;
+
+    expect(retention.failedJobs).toBeGreaterThan(retention.completedJobs);
+  });
+
   test("queue hashtags are distinct, so queues do not all serialise on one thread", () => {
     const hashtags = Object.values(config.queue).map((queue) => queue.name);
 

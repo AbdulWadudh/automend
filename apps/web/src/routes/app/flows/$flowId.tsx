@@ -168,20 +168,42 @@ function FlowBuilder({ flow }: { flow: Flow }) {
     enabled: savedWebhookPath !== undefined,
   });
 
+  /**
+   * What a `{{variable}}` in this flow may refer to, derived from the last request it received.
+   *
+   * Two things here are load-bearing, and getting either wrong makes every chip the picker inserts
+   * unresolvable at run time:
+   *
+   * - the paths are prefixed with `trigger`, because that is where the run context puts the trigger's
+   *   output. A path taken straight from the body — `{{email}}` — resolves to nothing, and the literal
+   *   travels on to whatever the step talks to.
+   * - the *whole* delivery is offered, not just its body, so `{{trigger.method}}` and the headers are
+   *   reachable as well. The engine already resolves them; only the picker did not say so.
+   *
+   * `body` is listed first because it is what anybody is looking for, and the picker keeps insertion
+   * order.
+   */
   const variables = useMemo(() => {
-    const latest = deliveries.data?.[0]?.body;
+    const latest = deliveries.data?.[0];
 
     if (!latest) {
       return [];
     }
 
+    let body: unknown;
+
     try {
-      return listSampleVariables(JSON.parse(latest));
+      body = latest.body === null ? null : JSON.parse(latest.body);
     } catch {
-      // A delivery that is not JSON offers no named fields. That is a fact about the payload, not
-      // an error worth showing — the picker is simply empty.
-      return [];
+      // A delivery that is not JSON offers no named fields inside it. That is a fact about the payload
+      // rather than an error worth showing, and the request's own metadata is still worth offering.
+      body = null;
     }
+
+    return listSampleVariables(
+      { body, method: latest.method, path: latest.path, query: latest.query, headers: latest.headers },
+      config.flows.templates.triggerVariablePrefix,
+    );
   }, [deliveries.data]);
 
   const problem = findDefinitionProblem(definition);

@@ -112,6 +112,65 @@ describe("listing the variables a template uses", () => {
   });
 });
 
+/**
+ * The invariant that was missing, and whose absence let a real bug ship.
+ *
+ * The picker's job is to insert a path the engine can resolve. It was called on a webhook's *body*, so it
+ * offered `{{email}}` — while the engine resolves against `{ trigger, steps }`, where that value lives at
+ * `trigger.body.email`. Every chip the builder inserted was unresolvable, the literal `{{email}}` was sent to
+ * Gmail, and it came back as `Invalid To header`.
+ *
+ * Asserting specific paths could never have caught that: each half was self-consistent. Only round-tripping
+ * the two together does.
+ */
+describe("every variable offered is one that resolves", () => {
+  const { triggerVariablePrefix, stepsVariablePrefix } = config.flows.templates;
+
+  /** The shape a webhook trigger actually produces, and the context the engine builds around it. */
+  const payload = { body: delivery, method: "POST", path: "incoming", query: null, headers: { host: "x" } };
+  const context = { [triggerVariablePrefix]: payload, [stepsVariablePrefix]: {} };
+
+  test("with the trigger prefix, nothing the picker offers is unresolvable", () => {
+    const variables = listSampleVariables(payload, triggerVariablePrefix);
+
+    expect(variables.length).toBeGreaterThan(0);
+
+    for (const variable of variables) {
+      const rendered = renderTemplate(toTemplateToken(variable.path), context);
+
+      expect(rendered.unresolved).toEqual([]);
+      // And it must substitute the actual value, not merely fail to complain.
+      expect(rendered.text).not.toContain(config.flows.templates.openDelimiter);
+    }
+  });
+
+  test("without the prefix, every path it offers is unresolvable — which was the bug", () => {
+    const variables = listSampleVariables(payload);
+
+    expect(variables.length).toBeGreaterThan(0);
+
+    for (const variable of variables) {
+      expect(renderTemplate(toTemplateToken(variable.path), context).unresolved).toEqual([variable.path]);
+    }
+  });
+
+  test("the prefix is added to the path and kept out of the label", () => {
+    // The label names the field for somebody reading a menu; repeating the context root in it is noise.
+    const [first] = listSampleVariables({ body: { email: "a@b.c" } }, triggerVariablePrefix);
+
+    expect(first?.path).toBe(`${triggerVariablePrefix}.body.email`);
+    expect(first?.label).toBe("body › email");
+  });
+
+  test("a deeply nested value survives the prefix", () => {
+    // The prefix is applied after the walk, so it cannot push a field past `maxSampleDepth` and out of the menu.
+    const deep = { body: { a: { b: { c: { d: { e: "found" } } } } } };
+    const paths = listSampleVariables(deep, triggerVariablePrefix).map((variable) => variable.path);
+
+    expect(paths).toContain(`${triggerVariablePrefix}.body.a.b.c.d.e`);
+  });
+});
+
 describe("offering variables from a received payload", () => {
   test("lists every leaf with a preview", () => {
     const variables = listSampleVariables(delivery);

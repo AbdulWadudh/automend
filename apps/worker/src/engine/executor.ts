@@ -205,15 +205,6 @@ export async function executeFlow(options: ExecuteFlowOptions): Promise<Executio
       continue;
     }
 
-    if (resolution.resolved.unresolved.length > 0) {
-      // Not fatal — an unresolved variable renders as the literal it was written as — but worth saying, because
-      // it is the most common reason a step does something subtly wrong rather than failing.
-      logger.warn(
-        { runId: run.id, step: step.name, unresolved: resolution.resolved.unresolved },
-        "step referred to data the flow did not receive",
-      );
-    }
-
     const claim: StepClaim = await claimStepRun(db, claimValuesFor(run, step, attempt, resolution.resolved.input));
 
     if (claim.outcome === "alreadyRecorded") {

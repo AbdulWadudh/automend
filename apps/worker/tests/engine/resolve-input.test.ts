@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Property } from "@automend/kit-framework";
+import { config } from "@automend/shared";
 import {
   buildResolutionContext,
   buildStepVariableKeys,
@@ -38,6 +39,30 @@ const delivery = {
 function resolve(stored: Record<string, unknown>, context = buildResolutionContext(delivery)) {
   return resolveStepInput(props, stored, context);
 }
+
+/**
+ * The other half of the picker invariant.
+ *
+ * `packages/shared` asserts that every path the builder offers carries `config.flows.templates
+ * .triggerVariablePrefix`; this asserts that the prefix is what the engine actually keys the context by. Neither
+ * test alone would have caught the two disagreeing, which is how `{{email}}` reached Gmail as a literal.
+ */
+describe("the context keys are the ones the builder writes paths against", () => {
+  test("the trigger's payload sits under the configured prefix", () => {
+    const context = buildResolutionContext(delivery) as Record<string, unknown>;
+
+    expect(context[config.flows.templates.triggerVariablePrefix]).toBe(delivery);
+  });
+
+  test("step outputs sit under the configured prefix", () => {
+    const context = withStepOutput(buildResolutionContext(delivery), "lookUpTheOrder", { total: 42 }) as Record<
+      string,
+      unknown
+    >;
+
+    expect(context[config.flows.templates.stepsVariablePrefix]).toEqual({ lookUpTheOrder: { total: 42 } });
+  });
+});
 
 describe("what a variable can refer to", () => {
   test("the trigger's whole payload, not just its body", () => {
@@ -86,31 +111,58 @@ describe("what a variable can refer to", () => {
   });
 });
 
+/**
+ * These used to assert the opposite, and the change is the point.
+ *
+ * The old behaviour rendered a missing variable as the literal `{{name}}` it was written as and carried on,
+ * reasoning that a required field would catch it. It does not: `"{{email}}"` is a non-empty string, so the
+ * required check passes and the literal is handed to the kit. In production that reached Gmail, which answered
+ * `HTTP 400 — Invalid To header` — a message that names neither the field nor the variable, and on a second
+ * attempt came back as a closed socket instead. Neither told the author that `{{email}}` was the problem.
+ *
+ * There is no reading under which `{{name}}` is a value somebody meant to transmit, so the step is refused
+ * before anything leaves the process.
+ */
 describe("a variable the data did not contain", () => {
-  /**
-   * Rendered as the literal it was written as, and reported. Rendering it empty would leave an author looking at a
-   * step that did something subtly wrong with no clue why; leaving the text visible in the journal says exactly
-   * which variable was missing.
-   */
-  test("renders as itself and is reported rather than silently emptied", () => {
+  test("stops the step instead of sending the literal onward", () => {
     const result = resolve({ to: "a@b.c", subject: "Hello {{trigger.body.nickname}}" });
 
-    expect(result.ok).toBe(true);
-
-    if (result.ok) {
-      expect(result.resolved.input.subject).toBe("Hello {{trigger.body.nickname}}");
-      expect(result.resolved.unresolved).toEqual(["trigger.body.nickname"]);
-    }
+    expect(result.ok).toBe(false);
   });
 
-  test("is fatal only when the field it was the whole of is required", () => {
-    // `to` is required and its entire value was the missing variable, so the field is not empty — it holds the
-    // literal — and the step runs with nonsense rather than failing. That is the honest trade: the alternative is
-    // refusing a step whose author may have meant the literal text.
+  test("names the variable, because that is the only thing the author can act on", () => {
     const result = resolve({ to: "{{trigger.body.nickname}}" });
 
-    expect(result.ok).toBe(true);
-    expect(result.ok && result.resolved.unresolved).toEqual(["trigger.body.nickname"]);
+    if (result.ok) {
+      throw new Error("expected the resolution to fail");
+    }
+
+    expect(result.failure.message).toContain("{{trigger.body.nickname}}");
+    expect(result.failure.unresolved).toEqual(["trigger.body.nickname"]);
+  });
+
+  test("names every missing variable at once, not just the first", () => {
+    // An author fixing one variable per run is an author running the flow four times to learn four things.
+    const result = resolve({ to: "{{trigger.body.email}}", subject: "{{trigger.body.subject}}" });
+
+    if (result.ok) {
+      throw new Error("expected the resolution to fail");
+    }
+
+    expect(result.failure.unresolved).toEqual(["trigger.body.email", "trigger.body.subject"]);
+    expect(result.failure.message).toContain("{{trigger.body.email}}");
+    expect(result.failure.message).toContain("{{trigger.body.subject}}");
+  });
+
+  test("a variable that does resolve is left alone", () => {
+    // The guard must not fire on a template that worked, which is every template in a working flow.
+    const result = resolve({ to: "a@b.c", subject: "Order {{trigger.body.orderId}}" });
+
+    if (!result.ok) {
+      throw new Error(`expected the resolution to succeed, got: ${result.failure.message}`);
+    }
+
+    expect(result.resolved.input.subject).toBe("Order A-1024");
   });
 });
 

@@ -99,14 +99,6 @@ export function withStepOutput(context: ResolutionContext, stepKey: string, outp
 export type ResolvedInput = {
   /** Ready for the kit: templates substituted, values coerced to their declared types. */
   input: Record<string, unknown>;
-  /**
-   * Variables the data did not contain.
-   *
-   * Reported rather than fatal. An unresolved variable renders as the literal `{{name}}` it was written as, so
-   * an author sees what went wrong in the journal instead of a mystery empty value — and a step that genuinely
-   * needed it fails its own required check a moment later, which is the more accurate error.
-   */
-  unresolved: string[];
 };
 
 export type ResolutionFailure = {
@@ -147,6 +139,32 @@ export function resolveStepInput(
     substituted[name] = rendered.text;
   }
 
+  /**
+   * A variable the data did not contain stops the step, here, before anything leaves the process.
+   *
+   * This used to be reported and carried on with, on the reasoning that the literal `{{name}}` is visible in
+   * the journal and that "a step that genuinely needed it fails its own required check a moment later". The
+   * second half is not true, and that is the whole bug: `"{{email}}"` is a *non-empty string*, so a required
+   * check passes and the literal is handed to the kit. Gmail then answered `HTTP 400 — Invalid To header`,
+   * which says nothing about the variable and names no field.
+   *
+   * There is no reading under which `{{name}}` is a value somebody meant to transmit, so refusing is both
+   * safe and far more informative. A step that should tolerate it can set `continueOnFailure`.
+   */
+  if (unresolved.size > 0) {
+    const paths = [...unresolved];
+
+    return {
+      ok: false,
+      failure: {
+        message: `${paths.length === 1 ? "the variable" : "the variables"} ${paths
+          .map((path) => `{{${path}}}`)
+          .join(", ")} did not resolve — the flow's data has no such value`,
+        unresolved: paths,
+      },
+    };
+  }
+
   const parsed = buildResolvedInputSchema(props).safeParse(substituted);
 
   if (!parsed.success) {
@@ -154,12 +172,12 @@ export function resolveStepInput(
       ok: false,
       failure: {
         message: describeInputIssues(parsed.error).join("; "),
-        unresolved: [...unresolved],
+        unresolved: [],
       },
     };
   }
 
-  return { ok: true, resolved: { input: parsed.data, unresolved: [...unresolved] } };
+  return { ok: true, resolved: { input: parsed.data } };
 }
 
 /**

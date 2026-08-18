@@ -615,6 +615,19 @@ export const config = {
     templates: {
       openDelimiter: "{{",
       closeDelimiter: "}}",
+      /**
+       * The two roots a `{{variable}}` path may start from — the keys of the engine's resolution context.
+       *
+       * Shared rather than written down in each place because the builder *writes* these paths and the
+       * engine *resolves* them, and the two silently disagreeing is not a hypothetical: the picker once
+       * offered paths taken straight from a webhook body, so `{{email}}` resolved to nothing and the
+       * literal travelled on to Gmail, which reported it as `Invalid To header`.
+       *
+       * `tests/config.test.ts` and `apps/worker/tests/engine/resolve-input.test.ts` between them pin these
+       * to the context the engine actually builds.
+       */
+      triggerVariablePrefix: "trigger",
+      stepsVariablePrefix: "steps",
       /** How deep into a received payload the variable picker will look for values to offer. */
       maxSampleDepth: 6,
       /** A cap on what the picker lists, so a large payload cannot produce an unusable menu. */
@@ -819,6 +832,25 @@ export const config = {
        */
       name: "{flow-executions}",
       jobName: "execute-flow",
+      /**
+       * How much finished work the queue keeps, which is the only thing the queue dashboard can show.
+       *
+       * Bounded by count rather than kept forever: Redis holds this, so unbounded history is a slow leak
+       * of memory that nothing reclaims. A count also degrades sensibly — the newest are the ones anybody
+       * is looking at.
+       *
+       * Failures are kept in greater number than successes on purpose. A completed job is history; a
+       * failed one is work somebody may still want to read or re-run, and the whole point of keeping it is
+       * that it outlives the noise of the successes around it.
+       *
+       * Note what this does *not* cover: a run whose step failed is still a *job that completed*, because
+       * the worker records the outcome in Postgres and returns normally. Only infrastructure failures — an
+       * uncaught throw, a stall, an unparseable payload — land in the failed set.
+       */
+      retention: {
+        completedJobs: 250,
+        failedJobs: 500,
+      },
     },
   },
 

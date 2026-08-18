@@ -79,8 +79,11 @@ export function createOutboxRelay({ db, queue, logger }: CreateOutboxRelayOption
         jobId: parsed.data.executionId,
         attempts: runs.retry.attempts,
         backoff: { type: "exponential", delay: runs.retry.backoffMs },
-        removeOnComplete: true,
-        removeOnFail: false,
+        // Bounded history rather than `true`/`false`. `removeOnComplete: true` deleted every successful
+        // job the instant it finished, which left the queue dashboard with nothing to show for a run that
+        // had plainly executed; `removeOnFail: false` kept failures for ever, which never reclaims.
+        removeOnComplete: { count: queueConfig.flowExecutions.retention.completedJobs },
+        removeOnFail: { count: queueConfig.flowExecutions.retention.failedJobs },
       });
 
       return true;

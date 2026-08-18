@@ -135,8 +135,17 @@ function toPreview(value: unknown): string {
  * Leaves only: `{{user}}` on an object would substitute a blob of JSON, which is almost never what
  * someone means, so the picker offers `{{user.email}}` and lets them type the other thing if they
  * really want it.
+ *
+ * **`prefix` is not decoration.** A path has to be resolvable against the *run context*, which is not the
+ * payload — it is `{ trigger, steps }`, so a webhook's body sits at `trigger.body`. Called without a
+ * prefix on a bare body, every path this returns is one the engine can never resolve: the picker inserts
+ * `{{email}}`, substitution finds nothing, and the literal `{{email}}` travels on to whatever the step
+ * talks to. That shipped once, and Gmail reported it as `Invalid To header`.
+ *
+ * The prefix is applied to the `path` only. `label` stays relative, because it names the field for
+ * somebody reading a menu rather than describing where the value lives.
  */
-export function listSampleVariables(sample: unknown): TemplateVariable[] {
+export function listSampleVariables(sample: unknown, prefix = ""): TemplateVariable[] {
   const variables: TemplateVariable[] = [];
 
   function walk(value: unknown, path: string[], depth: number): void {
@@ -165,7 +174,11 @@ export function listSampleVariables(sample: unknown): TemplateVariable[] {
 
   walk(sample, [], 0);
 
-  return variables;
+  // Applied after the walk, so the prefix costs nothing against `maxSampleDepth` — a deeply nested field
+  // must not drop out of the menu because of where the payload happens to sit in the context.
+  return prefix.length === 0
+    ? variables
+    : variables.map((variable) => ({ ...variable, path: `${prefix}.${variable.path}` }));
 }
 
 /** Wraps a path in the delimiters, so nothing else has to know what they are. */
