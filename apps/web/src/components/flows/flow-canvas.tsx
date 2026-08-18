@@ -1,4 +1,5 @@
-import { config, type FlowDefinition, type FlowStepKind } from "@automend/shared";
+import type { KitCatalogue } from "@automend/kit-framework";
+import { config, type FlowDefinition } from "@automend/shared";
 import {
   applyEdgeChanges,
   applyNodeChanges,
@@ -16,7 +17,8 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { addStep, connectNodes, disconnect, findNode, moveNode } from "@/lib/flow-editor";
-import { STEP_ACCENTS, TRIGGER_ACCENTS } from "@/lib/flow-kinds";
+import { accentForKit, describeNode } from "@/lib/flow-kinds";
+import { type ActionChoice, buildDefaultInput, findActionTarget, findTriggerTarget } from "@/lib/kits-api";
 import { type FlowCanvasNode, flowNodeTypes } from "./flow-node";
 import { type PickerAnchor, StepPicker } from "./step-picker";
 
@@ -33,35 +35,77 @@ type PendingConnection = {
   anchor: PickerAnchor;
 };
 
-function toCanvasNodes(definition: FlowDefinition, selectedNodeId: string | undefined): FlowCanvasNode[] {
-  const trigger: FlowCanvasNode = {
-    id: definition.trigger.id,
+/**
+ * The definition, as boxes on a canvas.
+ *
+ * Each node's summary comes from the catalogue — the kit author's own words for what it does — so the canvas and
+ * the inspector cannot describe the same step differently. When the catalogue has not arrived yet, or names a
+ * kit this deployment no longer has, `describeNode` falls back to the stored `kit.action`: less friendly, and
+ * far better than a node that renders blank.
+ */
+function toCanvasNodes(
+  definition: FlowDefinition,
+  selectedNodeId: string | undefined,
+  catalogue: KitCatalogue | undefined,
+): FlowCanvasNode[] {
+  const { trigger } = definition;
+  const triggerTarget = catalogue ? findTriggerTarget(catalogue, trigger.kitId, trigger.triggerName) : undefined;
+
+  const triggerNode: FlowCanvasNode = {
+    id: trigger.id,
     type: "trigger",
-    position: definition.trigger.position,
-    selected: definition.trigger.id === selectedNodeId,
-    data: { name: definition.trigger.name, config: definition.trigger.config },
+    position: trigger.position,
+    selected: trigger.id === selectedNodeId,
+    data: {
+      name: trigger.name,
+      kitId: trigger.kitId,
+      member: trigger.triggerName,
+      summary: describeNode({
+        kitId: trigger.kitId,
+        name: trigger.triggerName,
+        kitName: triggerTarget?.kit.displayName,
+        displayName: triggerTarget?.displayName,
+      }),
+      // Colour marks a kit; this is the same information as words, for anyone the colour does not reach.
+      badge: `Trigger: ${triggerTarget?.displayName ?? trigger.triggerName}`,
+    },
   };
 
-  const steps: FlowCanvasNode[] = definition.steps.map((step) => ({
-    id: step.id,
-    type: "step",
-    position: step.position,
-    selected: step.id === selectedNodeId,
-    data: { name: step.name, config: step.config },
-  }));
+  const steps: FlowCanvasNode[] = definition.steps.map((step) => {
+    const target = catalogue ? findActionTarget(catalogue, step.kitId, step.actionName) : undefined;
 
-  return [trigger, ...steps];
+    return {
+      id: step.id,
+      type: "step" as const,
+      position: step.position,
+      selected: step.id === selectedNodeId,
+      data: {
+        name: step.name,
+        kitId: step.kitId,
+        member: step.actionName,
+        summary: describeNode({
+          kitId: step.kitId,
+          name: step.actionName,
+          kitName: target?.kit.displayName,
+          displayName: target?.displayName,
+        }),
+        badge: `Step: ${target?.displayName ?? step.actionName}`,
+      },
+    };
+  });
+
+  return [triggerNode, ...steps];
 }
 
 /** An edge takes the colour of the node it leaves, so a branch is followable by eye. */
 function edgeStroke(definition: FlowDefinition, sourceId: string): string {
   if (definition.trigger.id === sourceId) {
-    return TRIGGER_ACCENTS[definition.trigger.config.kind].stroke;
+    return accentForKit(definition.trigger.kitId).stroke;
   }
 
   const step = definition.steps.find((candidate) => candidate.id === sourceId);
 
-  return step ? STEP_ACCENTS[step.config.kind].stroke : "currentColor";
+  return step ? accentForKit(step.kitId).stroke : "currentColor";
 }
 
 function toCanvasEdges(definition: FlowDefinition): Edge[] {
@@ -77,6 +121,8 @@ function toCanvasEdges(definition: FlowDefinition): Edge[] {
 export type FlowCanvasProps = {
   definition: FlowDefinition;
   selectedNodeId: string | undefined;
+  /** Undefined until it loads. The canvas draws either way; only the wording is less specific. */
+  catalogue: KitCatalogue | undefined;
   onChange: (definition: FlowDefinition) => void;
   onSelect: (nodeId: string | undefined) => void;
 };
@@ -88,8 +134,8 @@ export type FlowCanvasProps = {
  * only updated at the points where something has actually been decided: a node dropped, an edge
  * drawn, an edge removed. Everything in between is presentation.
  */
-function FlowCanvasInner({ definition, selectedNodeId, onChange, onSelect }: FlowCanvasProps) {
-  const [nodes, setNodes] = useState<FlowCanvasNode[]>(() => toCanvasNodes(definition, selectedNodeId));
+function FlowCanvasInner({ definition, selectedNodeId, catalogue, onChange, onSelect }: FlowCanvasProps) {
+  const [nodes, setNodes] = useState<FlowCanvasNode[]>(() => toCanvasNodes(definition, selectedNodeId, catalogue));
   const [edges, setEdges] = useState<Edge[]>(() => toCanvasEdges(definition));
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | undefined>(undefined);
   const { screenToFlowPosition } = useReactFlow();
@@ -98,9 +144,9 @@ function FlowCanvasInner({ definition, selectedNodeId, onChange, onSelect }: Flo
   // The definition is the source of truth: whenever it changes — an added step, an undone edit,
   // a reload — the canvas is rebuilt from it rather than being patched to match.
   useEffect(() => {
-    setNodes(toCanvasNodes(definition, selectedNodeId));
+    setNodes(toCanvasNodes(definition, selectedNodeId, catalogue));
     setEdges(toCanvasEdges(definition));
-  }, [definition, selectedNodeId]);
+  }, [catalogue, definition, selectedNodeId]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<FlowCanvasNode>[]) => {
@@ -166,15 +212,24 @@ function FlowCanvasInner({ definition, selectedNodeId, onChange, onSelect }: Flo
   );
 
   const handlePick = useCallback(
-    (kind: FlowStepKind) => {
+    (choice: ActionChoice) => {
       if (!pendingConnection) {
         return;
       }
 
-      const { definition: next, stepId } = addStep(definition, kind, {
-        position: pendingConnection.position,
-        connectFrom: pendingConnection.sourceId,
-      });
+      const { definition: next, stepId } = addStep(
+        definition,
+        {
+          kitId: choice.kitId,
+          actionName: choice.actionName,
+          displayName: choice.displayName,
+          input: buildDefaultInput(choice.properties),
+        },
+        {
+          position: pendingConnection.position,
+          connectFrom: pendingConnection.sourceId,
+        },
+      );
 
       setPendingConnection(undefined);
       onChange(next);
@@ -216,6 +271,7 @@ function FlowCanvasInner({ definition, selectedNodeId, onChange, onSelect }: Flo
 
       <StepPicker
         anchor={pendingConnection?.anchor}
+        catalogue={catalogue}
         onPick={handlePick}
         onDismiss={() => setPendingConnection(undefined)}
       />

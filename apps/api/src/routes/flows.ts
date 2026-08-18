@@ -7,21 +7,36 @@
  * this" confirms that it exists.
  */
 
-import type { FlowRow } from "@automend/db";
+import type { FlowRow, RunSummary, StepRunSummary } from "@automend/db";
 import {
+  createFlowRunWithOutbox,
   deleteFlowForTenant,
   findFlowForTenant,
+  findRunForTenant,
   insertFlow,
   listDeliveriesForFlow,
   listFlowsForTenant,
+  listRunsForFlow,
+  listStepRunsForRun,
+  registerFlowTrigger,
   updateFlowForTenant,
 } from "@automend/db";
+import { describeDefinitionIssues, findTrigger, validateDefinitionAgainstRegistry } from "@automend/kits";
 import {
+  buildRunIdempotencyKey,
   config,
   createDefaultFlowDefinition,
   createFlowRequestSchema,
   type Flow,
+  type FlowDefinition,
+  type FlowRun,
+  type FlowStepRun,
+  flowValidationError,
   notFoundError,
+  type RunStatus,
+  readTriggerText,
+  type StepStatus,
+  startFlowRunRequestSchema,
   updateFlowRequestSchema,
 } from "@automend/shared";
 import { Hono } from "hono";
@@ -51,6 +66,88 @@ function toFlowResponse(row: FlowRow): Flow {
   };
 }
 
+function toRunResponse(row: RunSummary): FlowRun {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    flowId: row.flowId,
+    status: row.status as RunStatus,
+    source: row.source as FlowRun["source"],
+    idempotencyKey: row.idempotencyKey,
+    triggerPayload: row.triggerPayload,
+    error: row.error,
+    startedAt: row.startedAt?.toISOString() ?? null,
+    finishedAt: row.finishedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function toStepRunResponse(row: StepRunSummary): FlowStepRun {
+  return {
+    id: row.id,
+    runId: row.runId,
+    stepId: row.stepId,
+    stepName: row.stepName,
+    kitId: row.kitId,
+    actionName: row.actionName,
+    status: row.status as StepStatus,
+    attempt: row.attempt,
+    input: row.input,
+    output: row.output,
+    error: row.error,
+    startedAt: row.startedAt?.toISOString() ?? null,
+    finishedAt: row.finishedAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * The half of validation the shared schema cannot do.
+ *
+ * `flowDefinitionSchema` has already checked the structure by the time a body is parsed; this asks the
+ * registry whether the kits and actions it names exist and whether the values saved against them suit their
+ * fields. Every issue is reported at once, because an author who renamed a kit should see every step that
+ * needs attention rather than discovering them one save at a time.
+ */
+function assertDefinitionIsExecutable(definition: FlowDefinition): void {
+  const issues = validateDefinitionAgainstRegistry(definition);
+
+  if (issues.length > 0) {
+    throw flowValidationError(describeDefinitionIssues(issues));
+  }
+}
+
+/**
+ * Records which trigger this flow is now listening on.
+ *
+ * Written on every definition save rather than only when the trigger changes, because the registration is
+ * what the scheduler will read and a flow whose trigger was edited must not keep firing on the old one.
+ *
+ * `enabled` follows what this deployment can actually fire, so a polling trigger is registered but switched
+ * off until the scheduler exists — the honest state rather than a promise.
+ */
+async function syncTriggerRegistration(deps: ApiDependencies, tenantId: string, row: FlowRow): Promise<void> {
+  const { trigger } = row.definition;
+  const definition = findTrigger(trigger.kitId, trigger.triggerName);
+
+  if (!definition) {
+    return;
+  }
+
+  const schedulable: readonly string[] = config.kits.schedulableTriggerStrategies;
+
+  await registerFlowTrigger(deps.db, {
+    tenantId,
+    flowId: row.id,
+    triggerId: trigger.id,
+    kitId: trigger.kitId,
+    triggerName: trigger.triggerName,
+    strategy: definition.strategy,
+    // The one value a scheduler needs and cannot derive: a cron expression lives in the trigger's own input.
+    schedule: readTriggerText(trigger, "cron") ?? null,
+    enabled: schedulable.includes(definition.strategy),
+  });
+}
+
 export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
   const routes = new Hono<SessionEnv>();
 
@@ -67,13 +164,19 @@ export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
     const { tenantId, userId } = getRequestContext(c);
     const body = await parseJsonBody(c, createFlowRequestSchema);
 
+    const definition = body.definition ?? createDefaultFlowDefinition();
+
+    assertDefinitionIsExecutable(definition);
+
     const row = await insertFlow(deps.db, {
       tenantId,
       name: body.name,
       description: body.description ?? null,
-      definition: body.definition ?? createDefaultFlowDefinition(),
+      definition,
       createdBy: userId,
     });
+
+    await syncTriggerRegistration(deps, tenantId, row);
 
     return respondWithData(c, toFlowResponse(row), 201);
   });
@@ -95,10 +198,18 @@ export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
     const flowId = parseUuidParam(c, FLOW_ID_PARAM);
     const body = await parseJsonBody(c, updateFlowRequestSchema);
 
+    if (body.definition) {
+      assertDefinitionIsExecutable(body.definition);
+    }
+
     const row = await updateFlowForTenant(deps.db, tenantId, flowId, body);
 
     if (!row) {
       throw notFoundError(`No flow with id ${flowId}`);
+    }
+
+    if (body.definition) {
+      await syncTriggerRegistration(deps, tenantId, row);
     }
 
     return respondWithData(c, toFlowResponse(row));
@@ -127,6 +238,76 @@ export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
         processedAt: delivery.processedAt?.toISOString() ?? null,
       })),
     );
+  });
+
+  /**
+   * Starting a run by hand.
+   *
+   * The run is created and its execution queued in one transaction, so a `202` here means what it means on the
+   * webhook route: this will run, or nothing was written at all.
+   *
+   * `idempotencyKey` is optional. A caller that wants a double-clicked button to be one run supplies one; a
+   * caller that does not gets a fresh run each time. Requiring it would be a nicer invariant and a worse API —
+   * nobody has a stable id for "I pressed the button".
+   */
+  routes.post(`${FLOW_ID_ROUTE}/runs`, async (c) => {
+    const { tenantId } = getRequestContext(c);
+    const flowId = parseUuidParam(c, FLOW_ID_PARAM);
+    const body = await parseJsonBody(c, startFlowRunRequestSchema);
+    const row = await findFlowForTenant(deps.db, tenantId, flowId);
+
+    if (!row) {
+      throw notFoundError(`No flow with id ${flowId}`);
+    }
+
+    // Checked here rather than left to the engine, so a flow that cannot run says so while somebody is looking
+    // at it. A run that fails a second later inside a worker is a far worse way to learn the same thing.
+    assertDefinitionIsExecutable(row.definition);
+
+    const run = await createFlowRunWithOutbox(deps.db, {
+      tenantId,
+      flowId,
+      source: "manual",
+      idempotencyKey: buildRunIdempotencyKey("manual", body.idempotencyKey ?? crypto.randomUUID()),
+      definitionSnapshot: row.definition,
+      triggerPayload: body.payload ?? null,
+    });
+
+    deps.logger.info({ flowId, tenantId, runId: run.id, duplicate: !run.isNew }, "manual run requested");
+
+    return respondWithData(c, { runId: run.id, duplicate: !run.isNew }, run.isNew ? 202 : 200);
+  });
+
+  routes.get(`${FLOW_ID_ROUTE}/runs`, async (c) => {
+    const { tenantId } = getRequestContext(c);
+    const flowId = parseUuidParam(c, FLOW_ID_PARAM);
+
+    // Confirms the flow belongs to this workspace before reading anything hanging off it.
+    if (!(await findFlowForTenant(deps.db, tenantId, flowId))) {
+      throw notFoundError(`No flow with id ${flowId}`);
+    }
+
+    const runs = await listRunsForFlow(deps.db, tenantId, flowId, config.runs.recentRuns);
+
+    return respondWithData(c, runs.map(toRunResponse));
+  });
+
+  /** One run and its journal, which is what the builder shows when somebody opens it. */
+  routes.get(`${FLOW_ID_ROUTE}/runs/:runId`, async (c) => {
+    const { tenantId } = getRequestContext(c);
+    const flowId = parseUuidParam(c, FLOW_ID_PARAM);
+    const runId = parseUuidParam(c, "runId");
+    const run = await findRunForTenant(deps.db, tenantId, runId);
+
+    // The flow id has to match as well as the tenant: a run reached through the wrong flow's URL is not this
+    // flow's run, and answering with it would let one flow's history be read through another's address.
+    if (!run || run.flowId !== flowId) {
+      throw notFoundError(`No run with id ${runId}`);
+    }
+
+    const steps = await listStepRunsForRun(deps.db, tenantId, runId);
+
+    return respondWithData(c, { ...toRunResponse(run), steps: steps.map(toStepRunResponse) });
   });
 
   routes.delete(FLOW_ID_ROUTE, async (c) => {

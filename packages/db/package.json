@@ -15,6 +15,7 @@
     "db:studio": "bun --env-file=../../.env run drizzle-kit studio"
   },
   "dependencies": {
+    "@automend/kits": "workspace:*",
     "@automend/shared": "workspace:*",
     "drizzle-orm": "^0.44.7",
     "pg": "^8.16.3"

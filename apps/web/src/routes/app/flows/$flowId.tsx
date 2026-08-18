@@ -1,4 +1,11 @@
-import { config, type Flow, type FlowDefinition, flowDefinitionSchema, listSampleVariables } from "@automend/shared";
+import {
+  config,
+  type Flow,
+  type FlowDefinition,
+  flowDefinitionSchema,
+  listSampleVariables,
+  readTriggerText,
+} from "@automend/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckIcon, CircleAlertIcon, LoaderCircleIcon, WebhookIcon } from "lucide-react";
@@ -13,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { duplicateStep, isTrigger, removeStep } from "@/lib/flow-editor";
 import { flowQueryKeys, getFlow, listDeliveries, updateFlow } from "@/lib/flows-api";
+import { fetchKitCatalogue, findTriggerSummary, kitQueryKeys } from "@/lib/kits-api";
 
 const { routes, flowIdParam } = config.webClient;
 const { flowName } = config.validation;
@@ -99,12 +107,39 @@ function FlowBuilder({ flow }: { flow: Flow }) {
     },
   });
 
-  // Two different things, and conflating them is what made a freshly switched trigger answer 404:
-  // the draft decides whether the builder *offers* webhook tooling, the saved definition decides
-  // whether an address actually exists, because that is what the API routes on.
-  const draftWebhookPath = definition.trigger.config.kind === "webhook" ? definition.trigger.config.path : undefined;
-  const savedWebhookPath =
-    flow.definition.trigger.config.kind === "webhook" ? flow.definition.trigger.config.path : undefined;
+  /**
+   * The kit catalogue: what a step or trigger can be, and what fields each one has.
+   *
+   * Fetched once and kept, because it only changes when the API is redeployed. Every builder surface reads from
+   * it — the canvas for a node's summary, the picker for the list, the inspector for the form — so a single
+   * query feeds all three rather than each fetching its own.
+   */
+  const catalogueQuery = useQuery({
+    queryKey: kitQueryKeys.catalogue(),
+    queryFn: ({ signal }) => fetchKitCatalogue(signal),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+  const catalogue = catalogueQuery.data;
+
+  /**
+   * Whether the trigger listens on a URL, and if so at which path.
+   *
+   * `draft` and `saved` are two different things, and conflating them is what made a freshly switched trigger
+   * answer 404: the draft decides whether the builder *offers* webhook tooling, the saved definition decides
+   * whether an address actually exists, because that is what the API routes on.
+   *
+   * "Is this a webhook trigger" comes from the catalogue's `strategy` rather than from a hardcoded kit id, so a
+   * second kit that also listens on a URL gets the same tooling without this file changing.
+   */
+  const isWebhookTrigger = (candidate: FlowDefinition) =>
+    catalogue !== undefined &&
+    findTriggerSummary(catalogue, candidate.trigger.kitId, candidate.trigger.triggerName)?.strategy === "webhook";
+
+  const draftWebhookPath = isWebhookTrigger(definition) ? readTriggerText(definition.trigger, "path") : undefined;
+  const savedWebhookPath = isWebhookTrigger(flow.definition)
+    ? readTriggerText(flow.definition.trigger, "path")
+    : undefined;
 
   /**
    * The variables a step can name, taken from the most recent delivery.
@@ -182,7 +217,12 @@ function FlowBuilder({ flow }: { flow: Flow }) {
           className="h-8 w-full max-w-xs"
         />
 
-        <StepPalette definition={definition} onChange={setDefinition} onSelect={setSelectedNodeId} />
+        <StepPalette
+          definition={definition}
+          catalogue={catalogue}
+          onChange={setDefinition}
+          onSelect={setSelectedNodeId}
+        />
 
         {draftWebhookPath !== undefined && (
           <Button variant="outline" size="sm" onClick={() => setIsTestingWebhook((testing) => !testing)}>
@@ -211,6 +251,7 @@ function FlowBuilder({ flow }: { flow: Flow }) {
           <FlowCanvas
             definition={definition}
             selectedNodeId={selectedNodeId}
+            catalogue={catalogue}
             onChange={setDefinition}
             onSelect={setSelectedNodeId}
           />
@@ -222,6 +263,9 @@ function FlowBuilder({ flow }: { flow: Flow }) {
           savedWebhookPath={savedWebhookPath}
           definition={definition}
           selectedNodeId={selectedNodeId}
+          catalogue={catalogue}
+          catalogueError={catalogueQuery.error}
+          onRetryCatalogue={() => void catalogueQuery.refetch()}
           onChange={setDefinition}
           onSelect={setSelectedNodeId}
         />

@@ -252,6 +252,14 @@ export const config = {
       flows: `${API_BASE_PATH}/flows`,
       connections: `${API_BASE_PATH}/connections`,
       /**
+       * The kit catalogue the builder renders from.
+       *
+       * Served over HTTP rather than imported, because a kit's code calls third-party APIs and has no business
+       * in a browser bundle. The builder needs kit *metadata* — what fields a step has, what a trigger's sample
+       * payload looks like — and this is how it gets it without the implementations coming too.
+       */
+      kits: `${API_BASE_PATH}/kits`,
+      /**
        * Inbound webhooks. The only unauthenticated route in the versioned API: the caller is a
        * third-party service that has no session and never will. What stands in for authentication
        * is the flow's own id in the URL — 122 bits of randomness, and the reason the address must
@@ -474,17 +482,22 @@ export const config = {
    * instead of failing to parse them.
    */
   flows: {
-    definitionVersion: 1,
-    maxSteps: 50,
-    /** How a flow starts. One trigger per flow, and it is the only node with no incoming edge. */
-    triggerKinds: ["manual", "webhook", "schedule"],
-    defaultTriggerKind: "manual",
     /**
-     * What a step does. Deliberately a short list: each kind needs a sandboxed executor before it
-     * can run, so the builder only offers what the engine will be able to honour.
+     * 2 since kits.
+     *
+     * A v1 step named one of four hardcoded kinds (`http-request`, `send-email`, `delay`, `log`) and carried
+     * fields specific to each. A v2 step names a kit and an action and carries an opaque `input`, so the set
+     * of things a step can do is the registry rather than a union in this file. `upgradeFlowDefinition` in
+     * `@automend/kits` migrates stored v1 rows on read.
      */
-    stepKinds: ["http-request", "send-email", "delay", "log"],
-    defaultStepKind: "log",
+    definitionVersion: 2,
+    maxSteps: 50,
+    /** What a new flow starts with: a trigger somebody can press. */
+    defaultTrigger: {
+      kitId: "core",
+      triggerName: "manual",
+      name: "When triggered manually",
+    },
     httpMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     defaultHttpMethod: "GET",
     delay: {
@@ -589,6 +602,14 @@ export const config = {
     maxPollItems: 100,
     /** What a trigger returns when the builder tests it — enough to populate the variable picker. */
     testPollItems: 5,
+    /**
+     * The shape of a kit id and of an action or trigger name: camelCase.
+     *
+     * Here rather than beside the code that enforces it, because two packages need the same rule —
+     * `kit-framework` checks it when a kit is declared, and `flow-definition` checks it on a step read back
+     * out of the database. A second copy is how a stored flow comes to name something no kit could be.
+     */
+    namePattern: "^[a-z][a-zA-Z0-9]*$",
     /**
      * How much text a step's field may hold, by shape of field.
      *

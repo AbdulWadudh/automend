@@ -15,6 +15,8 @@
       "dependencies": {
         "@automend/auth": "workspace:*",
         "@automend/db": "workspace:*",
+        "@automend/kit-framework": "workspace:*",
+        "@automend/kits": "workspace:*",
         "@automend/shared": "workspace:*",
         "better-auth": "^1.6.29",
         "hono": "^4.10.4",
@@ -29,6 +31,7 @@
       "name": "@automend/web",
       "version": "0.1.0",
       "dependencies": {
+        "@automend/kit-framework": "workspace:*",
         "@automend/shared": "workspace:*",
         "@fontsource-variable/geist": "^5.3.0",
         "@lexical/html": "^0.49.0",
@@ -103,6 +106,7 @@
       "name": "@automend/db",
       "version": "0.1.0",
       "dependencies": {
+        "@automend/kits": "workspace:*",
         "@automend/shared": "workspace:*",
         "drizzle-orm": "^0.44.7",
         "pg": "^8.16.3",

@@ -7,6 +7,7 @@
  * and carried onto everything written here, rather than being taken from the request.
  */
 
+import { upgradeFlowDefinition } from "@automend/kits";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { Database } from "./client";
 import { flows, flowWebhookDeliveries } from "./schema";
@@ -30,8 +31,16 @@ export async function findFlowForWebhook(db: Database, flowId: string): Promise<
     .from(flows)
     .where(eq(flows.id, flowId))
     .limit(1);
+  const row = rows[0];
 
-  return rows[0];
+  if (!row) {
+    return undefined;
+  }
+
+  // Upgraded like every other read, so the route matching a webhook path sees the same definition the engine
+  // will execute — matching against a v1 shape here and running a v2 one there is how a flow comes to accept a
+  // request it then cannot run.
+  return { ...row, definition: upgradeFlowDefinition(row.definition) };
 }
 
 export type RecordDeliveryValues = {

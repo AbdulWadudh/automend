@@ -10,3 +10,10 @@ export { coreKit } from "./core";
 export { gmailKit } from "./gmail";
 export { httpKit } from "./http";
 export { describeStepKind, findAction, findKit, findTrigger, kits } from "./registry";
+export { isCurrentDefinition, upgradeFlowDefinition } from "./upgrade-definition";
+export type { DefinitionIssue } from "./validate-definition";
+export {
+  describeDefinitionIssues,
+  findStepsMissingConnections,
+  validateDefinitionAgainstRegistry,
+} from "./validate-definition";

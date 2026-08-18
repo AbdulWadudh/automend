@@ -7,17 +7,7 @@
  * deleted, and never producing a graph the API's schema would reject.
  */
 
-import {
-  config,
-  type FlowDefinition,
-  type FlowEdge,
-  type FlowStepConfig,
-  type FlowStepKind,
-  type FlowStepNode,
-  type FlowTriggerConfig,
-  type FlowTriggerKind,
-} from "@automend/shared";
-import { createStepConfig, createTriggerConfig, STEP_KIND_LABELS } from "./flow-kinds";
+import { config, type FlowDefinition, type FlowEdge, type FlowStepNode } from "@automend/shared";
 
 const { canvas } = config.flows;
 
@@ -70,6 +60,28 @@ export function nextNodePosition(definition: FlowDefinition): FlowNodePosition {
   return position;
 }
 
+/**
+ * Which action a step performs, and what it starts out holding.
+ *
+ * The defaults come from the catalogue rather than from a factory in this file. Before kits, adding a step meant
+ * editing a `createStepConfig` switch here as well as the schema and three lookup maps; now the kit that
+ * declared the fields is also what says what they start as, and the builder learns both over HTTP.
+ */
+export type StepTarget = {
+  kitId: string;
+  actionName: string;
+  /** The kit author's name for it, used as the node's initial name so a new node is never called "Step". */
+  displayName: string;
+  input: Record<string, unknown>;
+};
+
+export type TriggerTarget = {
+  kitId: string;
+  triggerName: string;
+  displayName: string;
+  input: Record<string, unknown>;
+};
+
 export type AddStepOptions = {
   /** Where to drop it. Defaults to below the lowest node — see `nextNodePosition`. */
   position?: FlowNodePosition;
@@ -89,14 +101,17 @@ export type AddStepOptions = {
  */
 export function addStep(
   definition: FlowDefinition,
-  kind: FlowStepKind,
+  target: StepTarget,
   options: AddStepOptions = {},
 ): { definition: FlowDefinition; stepId: string } {
   const step: FlowStepNode = {
     id: crypto.randomUUID(),
-    name: STEP_KIND_LABELS[kind],
+    name: target.displayName,
     position: options.position ?? nextNodePosition(definition),
-    config: createStepConfig(kind),
+    kitId: target.kitId,
+    actionName: target.actionName,
+    input: target.input,
+    continueOnFailure: false,
   };
 
   const withStep: FlowDefinition = { ...definition, steps: [...definition.steps, step] };
@@ -169,34 +184,117 @@ export function renameNode(definition: FlowDefinition, nodeId: string, name: str
   };
 }
 
-export function setTriggerConfig(definition: FlowDefinition, triggerConfig: FlowTriggerConfig): FlowDefinition {
-  return { ...definition, trigger: { ...definition.trigger, config: triggerConfig } };
-}
-
-export function setTriggerKind(definition: FlowDefinition, kind: FlowTriggerKind): FlowDefinition {
-  if (definition.trigger.config.kind === kind) {
-    return definition;
-  }
-
-  return setTriggerConfig(definition, createTriggerConfig(kind));
-}
-
-export function setStepConfig(definition: FlowDefinition, stepId: string, stepConfig: FlowStepConfig): FlowDefinition {
+function mapStep(
+  definition: FlowDefinition,
+  stepId: string,
+  change: (step: FlowStepNode) => FlowStepNode,
+): FlowDefinition {
   return {
     ...definition,
-    steps: definition.steps.map((step) => (step.id === stepId ? { ...step, config: stepConfig } : step)),
+    steps: definition.steps.map((step) => (step.id === stepId ? change(step) : step)),
   };
 }
 
-/** Switching kind replaces the whole configuration: a delay has no URL to carry over. */
-export function setStepKind(definition: FlowDefinition, stepId: string, kind: FlowStepKind): FlowDefinition {
+/**
+ * Points a step at a different action, replacing what it held.
+ *
+ * Replacing rather than merging, and the reason is the same as it was before kits: a wait has no URL to carry
+ * over. Two actions that happen to share a field name mean nothing by it, so keeping values across a switch
+ * leaves an author with settings they never chose — worse than an empty form, because it looks configured.
+ *
+ * The node's name is left alone. It is the author's label for this step in their flow, not a restatement of
+ * which action it runs — that is on the node already, under the name. Only a blank name is filled in, because a
+ * nameless node is unreadable on the canvas.
+ */
+export function setStepAction(definition: FlowDefinition, stepId: string, target: StepTarget): FlowDefinition {
   const step = definition.steps.find((candidate) => candidate.id === stepId);
 
-  if (!step || step.config.kind === kind) {
+  if (!step || (step.kitId === target.kitId && step.actionName === target.actionName)) {
     return definition;
   }
 
-  return setStepConfig(definition, stepId, createStepConfig(kind));
+  return mapStep(definition, stepId, (current) => ({
+    ...current,
+    kitId: target.kitId,
+    actionName: target.actionName,
+    input: target.input,
+    // A connection belongs to the kit that needed it, so switching kit discards it.
+    connectionId: undefined,
+    name: keepOrName(current.name, target.displayName),
+  }));
+}
+
+function keepOrName(currentName: string, fallback: string): string {
+  return currentName.trim().length === 0 ? fallback : currentName;
+}
+
+export function setTriggerAction(definition: FlowDefinition, target: TriggerTarget): FlowDefinition {
+  const { trigger } = definition;
+
+  if (trigger.kitId === target.kitId && trigger.triggerName === target.triggerName) {
+    return definition;
+  }
+
+  return {
+    ...definition,
+    trigger: {
+      ...trigger,
+      kitId: target.kitId,
+      triggerName: target.triggerName,
+      input: target.input,
+      connectionId: undefined,
+      name: keepOrName(trigger.name, target.displayName),
+    },
+  };
+}
+
+/**
+ * Sets one field on a step.
+ *
+ * A field cleared to empty text removes the key rather than storing `""`. That keeps "never filled in" and
+ * "deliberately blank" the same state, which is what the engine's resolved schema already assumes when it
+ * treats blank as absent — storing the empty string instead would make a required field pass its stored schema
+ * and fail at run time for a reason the builder never showed.
+ */
+export function setStepInput(definition: FlowDefinition, stepId: string, name: string, value: unknown): FlowDefinition {
+  return mapStep(definition, stepId, (step) => ({ ...step, input: withInputValue(step.input, name, value) }));
+}
+
+export function setTriggerInput(definition: FlowDefinition, name: string, value: unknown): FlowDefinition {
+  return {
+    ...definition,
+    trigger: { ...definition.trigger, input: withInputValue(definition.trigger.input, name, value) },
+  };
+}
+
+function withInputValue(input: Record<string, unknown>, name: string, value: unknown): Record<string, unknown> {
+  if (value === "" || value === undefined) {
+    const { [name]: _cleared, ...rest } = input;
+
+    return rest;
+  }
+
+  return { ...input, [name]: value };
+}
+
+export function setStepConnection(
+  definition: FlowDefinition,
+  stepId: string,
+  connectionId: string | undefined,
+): FlowDefinition {
+  return mapStep(definition, stepId, (step) => ({ ...step, connectionId }));
+}
+
+export function setTriggerConnection(definition: FlowDefinition, connectionId: string | undefined): FlowDefinition {
+  return { ...definition, trigger: { ...definition.trigger, connectionId } };
+}
+
+export function setStepContinueOnFailure(
+  definition: FlowDefinition,
+  stepId: string,
+  continueOnFailure: boolean,
+): FlowDefinition {
+  return mapStep(definition, stepId, (step) => ({ ...step, continueOnFailure }));
 }
 
 export function moveNode(definition: FlowDefinition, nodeId: string, position: FlowNodePosition): FlowDefinition {

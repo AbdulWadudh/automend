@@ -10,7 +10,7 @@
  * start rather than the first time somebody builds a flow with it.
  */
 
-import type { ConnectorId } from "@automend/shared";
+import { type ConnectorId, config } from "@automend/shared";
 import type { ActionDefinition } from "./action";
 import type { TriggerDefinition } from "./trigger";
 
@@ -59,8 +59,12 @@ export type KitDefinition = {
  *
  * They are identifiers a kit author types and a stored flow refers to, so they read like the code
  * around them. Files stay kebab-case, matching the rest of the repo.
+ *
+ * Built from `config.kits.namePattern` rather than written out here, because `flow-definition.ts` applies
+ * the same rule to a step read back out of the database — and a second copy of the pattern is how a
+ * stored flow comes to name something no kit could be.
  */
-export const KIT_NAME_PATTERN = /^[a-z][a-zA-Z0-9]*$/;
+export const KIT_NAME_PATTERN = new RegExp(config.kits.namePattern);
 
 function assertName(label: string, name: string): void {
   if (!KIT_NAME_PATTERN.test(name)) {

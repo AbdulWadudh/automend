@@ -63,6 +63,24 @@ export type TemplateFieldProps = {
    */
   rich?: boolean;
   placeholder?: string;
+  /**
+   * The hint and error elements describing this field.
+   *
+   * Passed through to the editable rather than dropped, because a field rendered from a kit's description gets
+   * its label, hint and error from that description — and an error nothing points at is a message a screen
+   * reader never reaches.
+   */
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
+  /**
+   * The stored length bound the kit declared.
+   *
+   * Enforced by refusing the change rather than by truncating: silently dropping the end of what somebody typed
+   * is a worse outcome than the keystroke appearing not to register.
+   */
+  maxLength?: number;
+  /** Extra classes for the editable — `tabular-nums` on a number field, `font-mono` on JSON. */
+  className?: string;
   onChange: (value: string) => void;
 };
 
@@ -80,7 +98,11 @@ export function TemplateField({
   multiline = false,
   rich = false,
   placeholder,
+  maxLength,
+  className,
   onChange,
+  "aria-describedby": describedBy,
+  "aria-invalid": invalid,
 }: TemplateFieldProps) {
   const [query, setQuery] = useState<string | null>(null);
   // Rich and plain differ only in which plugin owns the editable; everything else is shared.
@@ -99,16 +121,27 @@ export function TemplateField({
     (_editorState: unknown, editor: LexicalEditor) => {
       editor.read(() => {
         if (rich) {
-          onChange($readRichContent(editor));
+          const rendered = $readRichContent(editor);
+
+          if (maxLength === undefined || rendered.length <= maxLength) {
+            onChange(rendered);
+          }
+
           return;
         }
 
         const text = $readPlainContent();
         // A single-line field keeps its promise even if something is pasted with newlines in it.
-        onChange(multiline ? text : text.replace(/\n/g, " "));
+        const normalised = multiline ? text : text.replace(/\n/g, " ");
+
+        // Refused rather than truncated: quietly dropping the end of a pasted value is worse than the paste
+        // appearing not to take, because the author would not know which half they now have.
+        if (maxLength === undefined || normalised.length <= maxLength) {
+          onChange(normalised);
+        }
       });
     },
-    [multiline, onChange, rich],
+    [maxLength, multiline, onChange, rich],
   );
 
   const handleSelect = useCallback(
@@ -139,6 +172,9 @@ export function TemplateField({
         className={cn(
           "relative rounded-lg border border-input bg-transparent text-sm shadow-xs transition-[color,box-shadow] dark:bg-input/30",
           "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
+          // Paired with the message the field renders beneath it — a ring on its own says something is wrong
+          // without saying what, to anyone who can see it at all.
+          invalid && "border-destructive focus-within:border-destructive focus-within:ring-destructive/40",
         )}
       >
         {rich && <RichToolbar />}
@@ -148,12 +184,15 @@ export function TemplateField({
             <ContentEditable
               id={id}
               aria-placeholder={placeholder ?? ""}
+              aria-describedby={describedBy}
+              aria-invalid={invalid}
               placeholder={
                 <span className="pointer-events-none absolute top-2 left-3 text-muted-foreground">{placeholder}</span>
               }
               className={cn(
                 "w-full resize-none px-3 py-2 outline-none",
                 multiline ? "min-h-24 whitespace-pre-wrap" : "min-h-9",
+                className,
               )}
             />
           }

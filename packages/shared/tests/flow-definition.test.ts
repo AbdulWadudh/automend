@@ -8,16 +8,24 @@ import {
 } from "../src/flow-definition";
 
 /**
- * The graph rules are the highest-value logic in the package: they are what stops a definition
- * that cannot be executed from ever reaching the database, and the engine will trust them.
+ * The graph rules are the highest-value logic in the package: they are what stops a definition that could not
+ * be executed from ever reaching the database, and the engine trusts them.
+ *
+ * What is *not* here is anything about whether `gmail.sendEmail` exists or whether its input suits it. This
+ * module validates structure; the registry validates meaning, and it cannot be reached from here — the browser
+ * imports this file, and `@automend/shared` depends on nothing. Those tests live in
+ * `packages/kits/tests/validate-definition.test.ts`.
  */
 
 function stepNode(overrides: Partial<FlowStepNode> = {}): FlowStepNode {
   return {
     id: crypto.randomUUID(),
-    name: "Log something",
+    name: "Write to log",
     position: { x: 0, y: 0 },
-    config: { kind: "log", message: "hello" },
+    kitId: "core",
+    actionName: "log",
+    input: { message: "hello" },
+    continueOnFailure: false,
     ...overrides,
   };
 }
@@ -148,73 +156,64 @@ describe("graph rules", () => {
   });
 });
 
-describe("step configuration", () => {
-  test("an http step needs a real URL", () => {
+describe("a step's shape", () => {
+  test("a kit id and action name must be camelCase, matching what a kit can be called", () => {
     const definition = createDefaultFlowDefinition();
-    definition.steps = [stepNode({ config: { kind: "http-request", method: "GET", url: "not-a-url" } })];
+    definition.steps = [stepNode({ kitId: "google-sheets" })];
 
     expect(flowDefinitionSchema.safeParse(definition).success).toBe(false);
   });
 
-  test("a delay longer than the configured ceiling is rejected", () => {
+  test("an action name must be camelCase too", () => {
     const definition = createDefaultFlowDefinition();
-    definition.steps = [stepNode({ config: { kind: "delay", durationMs: config.flows.delay.maxMs + 1 } })];
+    definition.steps = [stepNode({ actionName: "send-email" })];
 
     expect(flowDefinitionSchema.safeParse(definition).success).toBe(false);
   });
 
-  test("an unknown step kind is rejected", () => {
+  /**
+   * Opaque here on purpose. Checking it against the action's property map is the registry's job, and a schema
+   * in this file that knew about `gmail.sendEmail` would drag every kit's code into the browser bundle.
+   */
+  test("input is accepted as an opaque record, whatever the kit will make of it", () => {
     const definition = createDefaultFlowDefinition();
-    // Cast because the whole point is a value TypeScript would refuse — it models what an
-    // untrusted request body can carry.
-    definition.steps = [stepNode({ config: { kind: "run-arbitrary-code" } as unknown as FlowStepNode["config"] })];
+    definition.steps = [stepNode({ input: { anything: "{{at.all}}", andANumber: 3 } })];
+
+    expect(flowDefinitionSchema.safeParse(definition).success).toBe(true);
+  });
+
+  test("continueOnFailure defaults to stopping, which is the safe reading of an unset switch", () => {
+    const definition = createDefaultFlowDefinition();
+    const { continueOnFailure: _omitted, ...withoutSwitch } = stepNode();
+    definition.steps = [withoutSwitch as FlowStepNode];
+
+    const result = flowDefinitionSchema.safeParse(definition);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.steps[0]?.continueOnFailure).toBe(false);
+  });
+
+  test("a connection is optional, because a step is configured before it is finished", () => {
+    const definition = createDefaultFlowDefinition();
+    definition.steps = [stepNode({ connectionId: undefined })];
+
+    expect(flowDefinitionSchema.safeParse(definition).success).toBe(true);
+  });
+
+  test("a definition written at the previous version is not accepted here", () => {
+    // `upgradeFlowDefinition` in `@automend/kits` is what reads those; this schema only knows the current one.
+    const definition = { ...createDefaultFlowDefinition(), version: 1 };
 
     expect(flowDefinitionSchema.safeParse(definition).success).toBe(false);
   });
 });
 
-describe("the offered kinds and the accepted kinds cannot drift apart", () => {
-  test("every step kind the builder offers is one the schema accepts", () => {
-    for (const kind of config.flows.stepKinds) {
-      const definition = createDefaultFlowDefinition();
-      definition.steps = [stepNode({ config: exampleStepConfig(kind) })];
+describe("a new flow", () => {
+  test("starts on the trigger config says it should", () => {
+    const definition = createDefaultFlowDefinition();
 
-      const result = flowDefinitionSchema.safeParse(definition);
-
-      expect(result.success).toBe(true);
-    }
-  });
-
-  test("every trigger kind the builder offers is one the schema accepts", () => {
-    for (const kind of config.flows.triggerKinds) {
-      const definition = createDefaultFlowDefinition();
-      definition.trigger.config = exampleTriggerConfig(kind);
-
-      expect(flowDefinitionSchema.safeParse(definition).success).toBe(true);
-    }
+    expect(definition.trigger.kitId).toBe(config.flows.defaultTrigger.kitId);
+    expect(definition.trigger.triggerName).toBe(config.flows.defaultTrigger.triggerName);
+    expect(definition.version).toBe(config.flows.definitionVersion);
   });
 });
-
-function exampleStepConfig(kind: (typeof config.flows.stepKinds)[number]): FlowStepNode["config"] {
-  switch (kind) {
-    case "http-request":
-      return { kind, method: config.flows.defaultHttpMethod, url: "https://example.com/hook" };
-    case "send-email":
-      return { kind, to: "someone@example.com", subject: "Hello", body: "Hi {{name}}" };
-    case "delay":
-      return { kind, durationMs: config.flows.delay.defaultMs };
-    case "log":
-      return { kind, message: "hello" };
-  }
-}
-
-function exampleTriggerConfig(kind: (typeof config.flows.triggerKinds)[number]): FlowDefinition["trigger"]["config"] {
-  switch (kind) {
-    case "manual":
-      return { kind };
-    case "webhook":
-      return { kind, path: "incoming" };
-    case "schedule":
-      return { kind, cron: "0 * * * *" };
-  }
-}

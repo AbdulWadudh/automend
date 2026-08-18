@@ -1,39 +1,26 @@
 /**
- * How each trigger and step kind is presented, and what a freshly added one contains.
+ * How a node is presented on the canvas: its colour and its icon.
  *
- * The kinds themselves come from `config.flows`; this is the copy that goes with them, kept beside
- * the builder rather than in the shared config for the same reason headlines are — it is wording,
- * not configuration.
+ * Keyed by kit id, not by what a step does. Before kits there were four step kinds and four entries; now the
+ * set is the registry, so this is a lookup with a fallback rather than an exhaustive map — a kit added tomorrow
+ * renders correctly without this file being touched, which is the whole point of the model.
+ *
+ * The labels and descriptions that used to live here come from the catalogue instead: they are the kit author's
+ * words, and duplicating them in the browser is how the picker comes to disagree with the engine.
  */
 
-import {
-  config,
-  type FlowStepConfig,
-  type FlowStepKind,
-  type FlowTriggerConfig,
-  type FlowTriggerKind,
-} from "@automend/shared";
+import { CircleDotIcon, ClockIcon, GlobeIcon, MailIcon, ScrollTextIcon, TimerIcon, ZapIcon } from "lucide-react";
+import type { ComponentType } from "react";
 
-export const TRIGGER_KIND_LABELS: Record<FlowTriggerKind, string> = {
-  manual: "Run manually",
-  webhook: "Incoming webhook",
-  schedule: "On a schedule",
-};
-
-export const STEP_KIND_LABELS: Record<FlowStepKind, string> = {
-  "http-request": "HTTP request",
-  "send-email": "Send email",
-  delay: "Wait",
-  log: "Write to log",
-};
+export type IconComponent = ComponentType<{ className?: string }>;
 
 /**
- * The colour a node wears, derived from what it does.
+ * The colour a node wears.
  *
- * Every class is written out in full rather than composed from the accent name, because Tailwind
- * finds classes by scanning source text — a template literal like `bg-node-${accent}` produces no
- * CSS at all. The `stroke` value is a raw custom property because it is handed to React Flow as an
- * inline SVG style rather than applied as a class.
+ * Every class is written out in full rather than composed from the accent name, because Tailwind finds classes
+ * by scanning source text — a template literal like `bg-node-${accent}` produces no CSS at all. The `stroke`
+ * value is a raw custom property because it is handed to React Flow as an inline SVG style rather than applied
+ * as a class.
  */
 export type NodeAccent = {
   /** The icon tile: a tinted background with the accent as its foreground. */
@@ -85,82 +72,74 @@ const ACCENTS = {
   },
 } as const satisfies Record<string, NodeAccent>;
 
-/** Distinct hues, so no two kinds an author sees side by side share a colour. */
-export const TRIGGER_ACCENTS: Record<FlowTriggerKind, NodeAccent> = {
-  manual: ACCENTS.emerald,
-  webhook: ACCENTS.rose,
-  schedule: ACCENTS.cyan,
+/**
+ * One accent per kit, so a colour means the same service everywhere it appears.
+ *
+ * Distinct hues, because a colour that repeats across two kits an author sees side by side conveys nothing.
+ */
+const KIT_ACCENTS: Readonly<Record<string, NodeAccent>> = {
+  core: ACCENTS.violet,
+  http: ACCENTS.sky,
+  gmail: ACCENTS.rose,
 };
 
-export const STEP_ACCENTS: Record<FlowStepKind, NodeAccent> = {
-  "http-request": ACCENTS.sky,
-  "send-email": ACCENTS.rose,
-  delay: ACCENTS.amber,
-  log: ACCENTS.violet,
+/**
+ * A kit nobody has styled yet still has to look deliberate.
+ *
+ * Reaching for a fallback is the normal case for a newly added kit, not an error state — so it is a real accent
+ * from the palette rather than an unstyled grey.
+ */
+const FALLBACK_ACCENT = ACCENTS.cyan;
+
+/**
+ * Icons by kit, then by the specific action or trigger where one kit does several different things.
+ *
+ * `core` needs the finer grain: a wait, a log line and three ways of starting a flow are not the same gesture,
+ * and one icon for all five would make the canvas unreadable.
+ */
+const KIT_ICONS: Readonly<Record<string, IconComponent>> = {
+  core: CircleDotIcon,
+  http: GlobeIcon,
+  gmail: MailIcon,
 };
 
-export function createTriggerConfig(kind: FlowTriggerKind): FlowTriggerConfig {
-  switch (kind) {
-    case "manual":
-      return { kind };
-    case "webhook":
-      return { kind, path: "incoming" };
-    case "schedule":
-      return { kind, cron: "0 9 * * *" };
-  }
+const MEMBER_ICONS: Readonly<Record<string, IconComponent>> = {
+  "core.delay": TimerIcon,
+  "core.log": ScrollTextIcon,
+  "core.manual": CircleDotIcon,
+  "core.webhook": ZapIcon,
+  "core.schedule": ClockIcon,
+};
+
+const FALLBACK_ICON = CircleDotIcon;
+
+export function accentForKit(kitId: string): NodeAccent {
+  return KIT_ACCENTS[kitId] ?? FALLBACK_ACCENT;
 }
 
-export function createStepConfig(kind: FlowStepKind): FlowStepConfig {
-  switch (kind) {
-    case "http-request":
-      return { kind, method: config.flows.defaultHttpMethod, url: "https://example.com" };
-    case "send-email":
-      return { kind, to: "", subject: "", body: "" };
-    case "delay":
-      return { kind, durationMs: config.flows.delay.defaultMs };
-    case "log":
-      return { kind, message: "Step reached" };
-  }
+/** `name` is the action or trigger name, which only some kits need to distinguish on. */
+export function iconForMember(kitId: string, name: string): IconComponent {
+  return MEMBER_ICONS[`${kitId}.${name}`] ?? KIT_ICONS[kitId] ?? FALLBACK_ICON;
 }
 
-/** The line under a node's name on the canvas: what this node will actually do. */
-export function describeTrigger(triggerConfig: FlowTriggerConfig): string {
-  switch (triggerConfig.kind) {
-    case "manual":
-      return "Started by hand";
-    case "webhook":
-      return `POST /${triggerConfig.path}`;
-    case "schedule":
-      return triggerConfig.cron;
-  }
-}
+/**
+ * The line under a node's name: which service, and what this node does with it.
+ *
+ * Built from the catalogue's own words when they are available and from the stored identifiers when they are
+ * not — a node whose kit has been removed still has to render, and `gmail.sendEmail` is a more useful thing to
+ * show an author than a blank line.
+ */
+export function describeNode(options: {
+  kitId: string;
+  name: string;
+  kitName: string | undefined;
+  displayName: string | undefined;
+}): string {
+  const { kitId, name, kitName, displayName } = options;
 
-export function describeStep(stepConfig: FlowStepConfig): string {
-  switch (stepConfig.kind) {
-    case "http-request":
-      return `${stepConfig.method} ${stepConfig.url}`;
-    case "send-email":
-      return stepConfig.to.length > 0 ? `To ${stepConfig.to}` : "No recipients yet";
-    case "delay":
-      return formatDuration(stepConfig.durationMs);
-    case "log":
-      return stepConfig.message;
-  }
-}
-
-const MILLISECONDS_PER_SECOND = 1_000;
-const SECONDS_PER_MINUTE = 60;
-
-function formatDuration(durationMs: number): string {
-  if (durationMs < MILLISECONDS_PER_SECOND) {
-    return `${durationMs} ms`;
+  if (kitName && displayName) {
+    return `${kitName} · ${displayName}`;
   }
 
-  const seconds = durationMs / MILLISECONDS_PER_SECOND;
-
-  if (seconds < SECONDS_PER_MINUTE) {
-    return `${seconds} s`;
-  }
-
-  return `${seconds / SECONDS_PER_MINUTE} min`;
+  return `${kitId}.${name}`;
 }

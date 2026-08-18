@@ -26,6 +26,16 @@ export const kitPropertySchema = z.object({
   /** Whether the field accepts `{{variable}}`, which decides whether it renders a template editor. */
   templatable: z.boolean(),
   defaultValue: z.unknown().optional(),
+  /**
+   * The bounds the kit declared, carried across so the builder can enforce them *in the field* rather than
+   * letting somebody type 60,000 characters and discover on save that it was refused.
+   *
+   * `maxLength` bounds what an author may type; `minimum`/`maximum` bound what the value may be once a variable
+   * has resolved — which is why a number field shows the range as a hint rather than clamping to it.
+   */
+  maxLength: z.number().optional(),
+  minimum: z.number().optional(),
+  maximum: z.number().optional(),
   /** Present only for `staticDropdown`. */
   options: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
 });
@@ -95,6 +105,9 @@ function describeProperties(props: InputPropertyMap): KitProperty[] {
     required: property.required,
     templatable: property.templatable,
     defaultValue: property.defaultValue,
+    maxLength: property.maxLength,
+    minimum: property.type === "number" ? property.minimum : undefined,
+    maximum: property.type === "number" ? property.maximum : undefined,
     options: property.type === "staticDropdown" ? property.options.map((option) => ({ ...option })) : undefined,
   }));
 }

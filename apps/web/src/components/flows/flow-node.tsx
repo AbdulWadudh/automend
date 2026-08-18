@@ -1,39 +1,27 @@
-import type { FlowStepConfig, FlowTriggerConfig } from "@automend/shared";
 import { Handle, type Node, type NodeProps, Position } from "@xyflow/react";
-import { ClockIcon, GlobeIcon, MailIcon, ScrollTextIcon, TimerIcon, WebhookIcon, ZapIcon } from "lucide-react";
-import type { ComponentType } from "react";
-import {
-  describeStep,
-  describeTrigger,
-  type NodeAccent,
-  STEP_ACCENTS,
-  STEP_KIND_LABELS,
-  TRIGGER_ACCENTS,
-  TRIGGER_KIND_LABELS,
-} from "@/lib/flow-kinds";
+import { accentForKit, type IconComponent, iconForMember, type NodeAccent } from "@/lib/flow-kinds";
 import { cn } from "@/lib/utils";
 
-export type TriggerNodeData = { name: string; config: FlowTriggerConfig };
-export type StepNodeData = { name: string; config: FlowStepConfig };
+/**
+ * What a node needs to draw itself.
+ *
+ * The canvas resolves the kit's own words from the catalogue and passes them down as `summary`, rather than this
+ * component looking anything up. A node is then renderable with no knowledge of which kits exist — which is what
+ * lets a kit added tomorrow appear on the canvas without this file being touched.
+ */
+export type CanvasNodeData = {
+  name: string;
+  kitId: string;
+  /** The action or trigger name, for the icon lookup where one kit does several different things. */
+  member: string;
+  summary: string;
+  /** `Trigger: Gmail · New email`, read out by a screen reader in place of the colour. */
+  badge: string;
+};
 
-export type TriggerCanvasNode = Node<TriggerNodeData, "trigger">;
-export type StepCanvasNode = Node<StepNodeData, "step">;
+export type TriggerCanvasNode = Node<CanvasNodeData, "trigger">;
+export type StepCanvasNode = Node<CanvasNodeData, "step">;
 export type FlowCanvasNode = TriggerCanvasNode | StepCanvasNode;
-
-type IconComponent = ComponentType<{ className?: string }>;
-
-const TRIGGER_ICONS: Record<FlowTriggerConfig["kind"], IconComponent> = {
-  manual: ZapIcon,
-  webhook: WebhookIcon,
-  schedule: ClockIcon,
-};
-
-const STEP_ICONS: Record<FlowStepConfig["kind"], IconComponent> = {
-  "http-request": GlobeIcon,
-  "send-email": MailIcon,
-  delay: TimerIcon,
-  log: ScrollTextIcon,
-};
 
 /**
  * One box on the canvas.
@@ -102,13 +90,14 @@ const HANDLE_CLASS = "!size-3 !border-2 !border-background !bg-muted-foreground 
 export function TriggerNode({ data, selected }: NodeProps<TriggerCanvasNode>) {
   return (
     <NodeShell
-      icon={TRIGGER_ICONS[data.config.kind]}
+      icon={iconForMember(data.kitId, data.member)}
       title={data.name}
-      summary={describeTrigger(data.config)}
-      accent={TRIGGER_ACCENTS[data.config.kind]}
-      badge={`Trigger: ${TRIGGER_KIND_LABELS[data.config.kind]}`}
+      summary={data.summary}
+      accent={accentForKit(data.kitId)}
+      badge={data.badge}
       selected={selected ?? false}
       hasSource
+      // Nothing can run before the trigger, so there is no handle for anything to connect into.
       hasTarget={false}
     />
   );
@@ -117,11 +106,11 @@ export function TriggerNode({ data, selected }: NodeProps<TriggerCanvasNode>) {
 export function StepNode({ data, selected }: NodeProps<StepCanvasNode>) {
   return (
     <NodeShell
-      icon={STEP_ICONS[data.config.kind]}
+      icon={iconForMember(data.kitId, data.member)}
       title={data.name}
-      summary={describeStep(data.config)}
-      accent={STEP_ACCENTS[data.config.kind]}
-      badge={`Step: ${STEP_KIND_LABELS[data.config.kind]}`}
+      summary={data.summary}
+      accent={accentForKit(data.kitId)}
+      badge={data.badge}
       selected={selected ?? false}
       hasSource
       hasTarget

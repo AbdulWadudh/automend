@@ -1,16 +1,32 @@
 /**
  * Flow queries.
  *
- * Every function here takes `tenantId` as a required argument and applies it to the `where`
- * clause, including the ones that already have a primary key. That is deliberate: a flow id is a
- * UUID a caller could have obtained anywhere, and scoping by tenant is what turns "not yours" into
- * "not found" rather than into a leak.
+ * Every function here takes `tenantId` as a required argument and applies it to the `where` clause, including
+ * the ones that already have a primary key. That is deliberate: a flow id is a UUID a caller could have
+ * obtained anywhere, and scoping by tenant is what turns "not yours" into "not found" rather than into a leak.
+ *
+ * Every *read* also passes its definition through `upgradeFlowDefinition`, so the invariant "a flow read from
+ * the database has a current definition" holds in one place rather than at each of a dozen call sites. That is
+ * what makes this module depend on `@automend/kits`: the version mapping names kits, so it cannot live in
+ * `@automend/shared`. Rows are not rewritten on read — an upgrade is applied in memory and persisted only when
+ * the flow is next saved, so reading a flow never needs a write transaction.
  */
 
+import { upgradeFlowDefinition } from "@automend/kits";
 import type { FlowDefinition } from "@automend/shared";
 import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "./client";
 import { type FlowRow, flows } from "./schema";
+
+/**
+ * A stored row with its definition brought up to date.
+ *
+ * Throws when a definition cannot be read at all, which is deliberate: executing or displaying half of
+ * somebody's flow is worse than refusing to, and the API turns this into a validation error naming the flow.
+ */
+function withCurrentDefinition(row: FlowRow): FlowRow {
+  return { ...row, definition: upgradeFlowDefinition(row.definition) };
+}
 
 export type InsertFlowValues = {
   tenantId: string;
@@ -27,7 +43,9 @@ export type UpdateFlowValues = {
 };
 
 export async function listFlowsForTenant(db: Database, tenantId: string): Promise<FlowRow[]> {
-  return await db.select().from(flows).where(eq(flows.tenantId, tenantId)).orderBy(desc(flows.updatedAt));
+  const rows = await db.select().from(flows).where(eq(flows.tenantId, tenantId)).orderBy(desc(flows.updatedAt));
+
+  return rows.map(withCurrentDefinition);
 }
 
 export async function findFlowForTenant(db: Database, tenantId: string, flowId: string): Promise<FlowRow | undefined> {
@@ -36,8 +54,9 @@ export async function findFlowForTenant(db: Database, tenantId: string, flowId: 
     .from(flows)
     .where(and(eq(flows.tenantId, tenantId), eq(flows.id, flowId)))
     .limit(1);
+  const row = rows[0];
 
-  return rows[0];
+  return row ? withCurrentDefinition(row) : undefined;
 }
 
 export async function insertFlow(db: Database, values: InsertFlowValues): Promise<FlowRow> {
@@ -48,7 +67,7 @@ export async function insertFlow(db: Database, values: InsertFlowValues): Promis
     throw new Error("Inserting a flow returned no row");
   }
 
-  return inserted;
+  return withCurrentDefinition(inserted);
 }
 
 /**
@@ -66,8 +85,9 @@ export async function updateFlowForTenant(
     .set({ ...values, updatedAt: new Date() })
     .where(and(eq(flows.tenantId, tenantId), eq(flows.id, flowId)))
     .returning();
+  const row = rows[0];
 
-  return rows[0];
+  return row ? withCurrentDefinition(row) : undefined;
 }
 
 export async function deleteFlowForTenant(db: Database, tenantId: string, flowId: string): Promise<boolean> {
