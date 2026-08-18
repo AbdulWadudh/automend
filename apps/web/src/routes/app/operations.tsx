@@ -165,7 +165,10 @@ function QueueConsoleCard({ available, unlocked }: { available: boolean; unlocke
               {/* A plain anchor, not a router Link: the dashboard is served by the API on this origin,
                   not by the SPA's router, so a client-side navigation would resolve to nothing. */}
               <Button size="sm" asChild>
-                <a href={config.http.routes.queueDashboard}>Open queues</a>
+                <a href={config.http.routes.queueDashboard} target="_blank" rel="noreferrer">
+                  Open queues
+                  <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
+                </a>
               </Button>
             </>
           ) : (
