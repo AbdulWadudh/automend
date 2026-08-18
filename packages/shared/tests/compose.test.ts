@@ -22,6 +22,16 @@ describe("docker-compose volume mounts", () => {
     expect(volumeTargetFor("postgres-data")).toBe(config.localDev.postgres.dataPath);
   });
 
+  /**
+   * The studio's store fails the same way, quietly: Gateway keeps the database connection you added
+   * and the session you signed in with under STORE_PATH, so a target that does not match it leaves
+   * the store inside the container. Everything works until the container is recreated, and then the
+   * connection is gone and there is nothing to say why.
+   */
+  test("the studio volume target matches the store path in config", () => {
+    expect(volumeTargetFor("studio-data")).toBe(config.ops.databaseStudio.storePath);
+  });
+
   test("no volume target uses variable substitution, which Coolify rejects", () => {
     const volumeLines = composeText
       .split("\n")
@@ -70,7 +80,7 @@ describe("docker-compose environment", () => {
   // Every api variable is passed by both files or neither. The API validates its environment at
   // startup and exits, so a variable missing from a compose file is a crash loop on deploy — and
   // for an optional one, a connector that silently never appears.
-  const apiSections = ["Authentication (api)", "Connectors (api)"];
+  const apiSections = ["Authentication (api)", "Connectors (api)", "Operator consoles (api)"];
 
   for (const sectionTitle of apiSections) {
     const variables = variablesInSection(sectionTitle);
@@ -88,6 +98,41 @@ describe("docker-compose environment", () => {
       });
     }
   }
+});
+
+describe("the database studio", () => {
+  /**
+   * Both compose files declare it, and both hand it the same STORE_PATH — the value is written
+   * literally in each, because Coolify rejects `${VAR}` in a volume target.
+   */
+  for (const [label, text] of [
+    ["docker-compose.yml", composeText],
+    ["deploy/coolify/docker-compose.yml", coolifyComposeText],
+  ] as const) {
+    test(`${label} declares the studio service`, () => {
+      expect(text).toContain(`${config.ops.databaseStudio.serviceName}:`);
+    });
+
+    test(`${label} points the studio's store at the configured path`, () => {
+      expect(text).toContain(`STORE_PATH: ${config.ops.databaseStudio.storePath}`);
+    });
+
+    test(`${label} gives the studio a master password`, () => {
+      // The whole of what guards a database console. An unset one deploys an open one.
+      expect(text).toContain("MASTERPASS:");
+    });
+  }
+
+  test("the coolify stack writes the studio image tag that config declares", () => {
+    // The root file substitutes ${STUDIO_IMAGE} from the generated .env; the coolify file has no .env
+    // to read and writes the tag literally, so this is the only thing stopping the two drifting.
+    expect(coolifyComposeText).toContain(config.ops.databaseStudio.image);
+  });
+
+  test("the coolify stack requires the studio's password rather than defaulting it", () => {
+    // `:-` would deploy an unprotected console; `:?` stops the deploy instead.
+    expect(/MASTERPASS: "\$\{STUDIO_PASSWORD:\?/.test(coolifyComposeText)).toBe(true);
+  });
 });
 
 describe("docker-compose image tags", () => {
@@ -124,5 +169,14 @@ describe("coolify magic variables", () => {
     // The value of the key is the path Coolify appends to the domain it generates. Anything that
     // is not a path — a URL, or a reference to the variable itself — is appended verbatim.
     expect(coolifyComposeText).toContain("SERVICE_FQDN_WEB_8080: /");
+  });
+
+  test("the studio declares a domain of its own, on its own port", () => {
+    // It cannot be proxied under a prefix of the web app the way /ops/queues is: Gateway serves its
+    // assets from the root of whatever origin it is on. So it needs a route of its own or it is
+    // deployed and unreachable.
+    const serviceName = config.ops.databaseStudio.serviceName.toUpperCase();
+
+    expect(coolifyComposeText).toContain(`SERVICE_FQDN_${serviceName}_${config.ops.databaseStudio.containerPort}: /`);
   });
 });

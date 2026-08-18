@@ -15,7 +15,11 @@
     "@automend/kit-framework": "workspace:*",
     "@automend/kits": "workspace:*",
     "@automend/shared": "workspace:*",
+    "@bull-board/api": "9.2.0",
+    "@bull-board/hono": "9.2.0",
+    "@bull-board/ui": "9.2.0",
     "better-auth": "^1.6.29",
+    "bullmq": "^5.63.0",
     "hono": "^4.10.4",
     "ioredis": "^5.9.0",
     "zod": "^4.1.13"

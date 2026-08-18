@@ -115,6 +115,13 @@ services:
       SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      # Switches the queue dashboard on, reached from /app/operations. Both halves or it stays off —
+      # see apps/api/src/routes/queue-dashboard.ts for what the credential admits.
+      OPS_DASHBOARD_USER: ${OPS_DASHBOARD_USER}
+      OPS_DASHBOARD_PASSWORD: ${OPS_DASHBOARD_PASSWORD}
+      # The studio's address as the *browser* sees it, so the Operations page can link to it. Not an
+      # in-network address: the browser is what follows this, not the api.
+      STUDIO_URL: ${STUDIO_URL}
     ports:
       - "${API_PORT}:${API_PORT}"
     depends_on:
@@ -178,6 +185,38 @@ services:
       api:
         condition: service_healthy
 
+  # Drizzle Gateway: Drizzle Studio, self-hosted. Named for what it is rather than what runs it,
+  # the same way `redis` is really Dragonfly.
+  #
+  # Not started by `bun run dev:up`, which brings up only the stores the apps need — run
+  # `docker compose up studio` when you want it. It knows nothing about this stack until you add a
+  # connection through its UI: paste DATABASE_URL_FROM_CONTAINER, since from in here `localhost` is
+  # this container.
+  studio:
+    image: ${STUDIO_IMAGE}
+    restart: unless-stopped
+    environment:
+      PORT: ${STUDIO_PORT}
+      # Where Gateway keeps the connections you add and the session you signed in with. Must match
+      # the volume below, or every restart asks for the database credentials again.
+      STORE_PATH: /app
+      # Never leave this empty. Gateway's login handler is `if (!MASTERPASS) return success` — with no
+      # master password it still renders a password box and accepts *anything typed into it*, so the
+      # studio reads as protected while being wide open. `.env.example` ships a local throwaway value
+      # for that reason, and the Coolify stack refuses to deploy without a real one.
+      MASTERPASS: ${STUDIO_PASSWORD:?do not leave this blank — Gateway would accept any password}
+    ports:
+      - "${STUDIO_PORT}:${STUDIO_PORT}"
+    volumes:
+      # Written literally rather than as ${STUDIO_STORE_PATH}: Coolify's compose parser rejects
+      # variable substitution in a volume *target*. tests/compose.test.ts fails if it drifts from
+      # config.ops.databaseStudio.storePath.
+      - studio-data:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   redis-data:
+  studio-data:

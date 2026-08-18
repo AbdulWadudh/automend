@@ -10,6 +10,8 @@ import { createFlowRoutes } from "./routes/flows";
 import { createHealthRoutes } from "./routes/health";
 import { createHookRoutes } from "./routes/hooks";
 import { createKitRoutes } from "./routes/kits";
+import { createOperationsRoutes } from "./routes/operations";
+import { createQueueDashboardRoutes } from "./routes/queue-dashboard";
 
 export function createApp(deps: ApiDependencies): Hono {
   const app = new Hono();
@@ -41,9 +43,26 @@ export function createApp(deps: ApiDependencies): Hono {
   app.route(config.http.routes.flows, createFlowRoutes(deps));
   app.route(config.http.routes.connections, createConnectionRoutes(deps));
   app.route(config.http.routes.kits, createKitRoutes(deps));
+  // What the Operations page reads and posts to: which consoles exist, and the operator password.
+  app.route(config.http.routes.operations, createOperationsRoutes(deps));
   // Deliberately outside the session middleware: the caller is somebody else's server. See the
   // module for why the URL is what stands in for authentication.
   app.route(config.http.routes.hooks, createHookRoutes(deps));
+
+  /**
+   * The queue dashboard, when the deployment configured one. Also outside the session middleware,
+   * and for the opposite reason to the hooks above: it reads across every tenant, so a session would
+   * scope nothing. It carries its own credential instead — see the module.
+   */
+  const queueDashboard = createQueueDashboardRoutes({
+    opsSession: deps.opsSession,
+    redis: deps.redis,
+    logger: deps.logger,
+  });
+
+  if (queueDashboard) {
+    app.route(config.http.routes.queueDashboard, queueDashboard);
+  }
 
   app.notFound(notFoundHandler);
   app.onError(createErrorHandler(deps.logger));

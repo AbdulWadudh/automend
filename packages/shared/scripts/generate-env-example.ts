@@ -17,7 +17,7 @@ type EnvSection = {
   entries: Array<[name: string, value: string | number, comment?: string]>;
 };
 
-const { localDev, services, env, http, telemetry, auth, connectors } = config;
+const { localDev, services, env, http, telemetry, auth, connectors, ops, webClient } = config;
 
 const sections: EnvSection[] = [
   {
@@ -164,6 +164,51 @@ const sections: EnvSection[] = [
     entries: [
       ["WEB_PORT", services.web.defaultPort],
       ["API_URL", localDev.urls.api, "Server-side proxy target. Never sent to the browser."],
+    ],
+  },
+  {
+    title: "Operator consoles (api)",
+    note: [
+      `Reached from ${webClient.routes.operations} in the app, which asks for OPS_DASHBOARD_PASSWORD and`,
+      `then links onward. Blank on purpose: with either half unset the queue dashboard is not mounted at`,
+      `all. It reads across EVERY tenant's job payloads and can enqueue work the worker will run, so the`,
+      `credential is an administrative one and there is no safe default to ship.`,
+    ].join("\n# "),
+    entries: [
+      ["OPS_DASHBOARD_USER", ""],
+      [
+        "OPS_DASHBOARD_PASSWORD",
+        "",
+        `At least ${ops.queueDashboard.passwordMinLength} characters, or the api refuses to start. Generate with: openssl rand -base64 24`,
+      ],
+      [
+        "STUDIO_URL",
+        localDev.urls.studio,
+        [
+          `The database studio's address as the BROWSER sees it, which is all the api can know: the studio`,
+          `runs on its own origin. Blank means the Operations page reports it as unavailable rather than`,
+          `offering a link that goes nowhere — so a deployment must set its real domain here.`,
+        ].join("\n# "),
+      ],
+    ],
+  },
+  {
+    title: "Database studio (docker-compose only)",
+    note: [
+      `Drizzle Gateway, on ${localDev.urls.studio} once started. Not part of \`dev:up\`: bring it up`,
+      `with \`docker compose up ${ops.databaseStudio.serviceName}\`, then add a connection in its UI using`,
+      `DATABASE_URL_FROM_CONTAINER above — from in there, localhost is the container itself.`,
+      `Do NOT blank STUDIO_PASSWORD. Gateway reads an absent master password as "accept any password":`,
+      `it still shows a login box and lets anything through, which looks protected and is not.`,
+    ].join("\n# "),
+    entries: [
+      ["STUDIO_IMAGE", ops.databaseStudio.image],
+      ["STUDIO_PORT", ops.databaseStudio.containerPort],
+      [
+        "STUDIO_PASSWORD",
+        ops.databaseStudio.localPassword,
+        "Becomes the image's MASTERPASS. A local throwaway; a deployment sets its own.",
+      ],
     ],
   },
 ];

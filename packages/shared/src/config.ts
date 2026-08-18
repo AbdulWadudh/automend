@@ -28,6 +28,9 @@ const WORKER_HEALTH_PORT = 3002;
 const WEB_PORT = 8080;
 const WEB_DEV_PORT = 5173;
 
+/** Fixed by the Drizzle Gateway image the database studio runs as; not ours to choose. */
+const STUDIO_PORT = 4983;
+
 /** Fixed by the official Postgres and Redis images; not ours to choose. */
 const POSTGRES_CONTAINER_PORT = 5432;
 const REDIS_CONTAINER_PORT = 6379;
@@ -79,6 +82,18 @@ const OTLP_GRPC_PORT = 4317;
 const OTLP_PROXY_PREFIX = "/otlp";
 
 /**
+ * The operator consoles live under one prefix of their own, outside the versioned API.
+ *
+ * Not a corner of `/api/v1` because everything there answers with the `{ data }` / `{ error }`
+ * envelope, and these serve HTML and their own static bundles. The web app proxies this prefix
+ * onward unchanged — unchanged being the requirement, since a dashboard builds its asset URLs from
+ * the path it was mounted at — so the consoles are reached on the one public origin and the API
+ * still needs no domain of its own.
+ */
+const OPS_PREFIX = "/ops";
+const OPS_QUEUES_PATH = "/queues";
+
+/**
  * Local development credentials for the compose stack. Deliberately trivial and non-secret —
  * real deployments supply their own through the environment, and these never reach an image.
  */
@@ -86,9 +101,22 @@ const LOCAL_POSTGRES_USER = "automend";
 const LOCAL_POSTGRES_PASSWORD = "automend";
 const LOCAL_POSTGRES_DATABASE = "automend";
 
+/**
+ * The local database studio's admin password. Throwaway like the ones above — but unlike them it must
+ * not be *blank*, and that is not a style preference.
+ *
+ * Drizzle Gateway's login handler is `if (!MASTERPASS) return { success: true }`. With no master
+ * password it still renders a password box and accepts **anything typed into it**, which reads as a
+ * console that is protected and is not. A real value here means the local studio behaves the way the
+ * deployed one does, so the difference is never discovered in production.
+ */
+const LOCAL_STUDIO_PASSWORD = "automend-studio-local";
+
 /** Compose service names — how one container addresses another on the local stack's network. */
 const LOCAL_POSTGRES_SERVICE = "postgres";
 const LOCAL_REDIS_SERVICE = "redis";
+/** Named for what it is rather than what runs it, the same way `redis` is really Dragonfly. */
+const STUDIO_SERVICE = "studio";
 
 /**
  * Images for the local stack. Keep the Postgres major version in step with the deployed one —
@@ -96,6 +124,16 @@ const LOCAL_REDIS_SERVICE = "redis";
  */
 const LOCAL_POSTGRES_IMAGE = "postgres:18-alpine";
 const LOCAL_REDIS_IMAGE = "docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1";
+
+/**
+ * The database studio is Drizzle Gateway — Drizzle Studio packaged to be self-hosted.
+ *
+ * A container rather than `drizzle-kit studio`, which serves its data to a *hosted* front-end at
+ * local.drizzle.studio over a connection to 127.0.0.1: that is a laptop tool, and there is no
+ * terminal on a deployed server to run it from. Pinned rather than `:latest`, like every other
+ * image here, so a redeploy cannot quietly change what is reading the database.
+ */
+const STUDIO_IMAGE = "ghcr.io/drizzle-team/gateway:1.4.1";
 
 /**
  * Where the Postgres data volume mounts.
@@ -106,6 +144,13 @@ const LOCAL_REDIS_IMAGE = "docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1";
  * outside the volume — it looks fine until the container is recreated and the database is empty.
  */
 const LOCAL_POSTGRES_DATA_PATH = "/var/lib/postgresql";
+
+/**
+ * Where Drizzle Gateway keeps its own store — the connections you add and the sessions you sign in
+ * with. Absolute rather than the `./app` the image's docs show, because the two only agree while
+ * the container's working directory stays `/`.
+ */
+const STUDIO_STORE_PATH = "/app";
 
 // ───────────────────────────── Derivations ─────────────────────────────
 
@@ -283,6 +328,26 @@ export const config = {
       /** Browser telemetry is proxied through this app's origin, so the collector stays private. */
       otlpProxyPrefix: OTLP_PROXY_PREFIX,
       otlpProxyPattern: `${OTLP_PROXY_PREFIX}/*`,
+      /**
+       * The operator consoles, proxied through this app's origin like the two above — but
+       * *verbatim*, with the prefix left on. A dashboard writes its own asset and API URLs relative
+       * to the path it was mounted at, so rewriting the prefix away the way the OTLP proxy does
+       * would serve the page and then 404 every script it asks for.
+       */
+      opsPrefix: OPS_PREFIX,
+      opsProxyPattern: `${OPS_PREFIX}/*`,
+      /** Bull Board, mounted by the api. Off unless the deployment sets credentials for it. */
+      queueDashboard: `${OPS_PREFIX}${OPS_QUEUES_PATH}`,
+      /**
+       * The JSON API *about* the consoles — which ones this deployment has, and the endpoint that
+       * exchanges the operator password for a session. Versioned like every other API route, and
+       * deliberately not under `opsPrefix`: that prefix is the consoles themselves, and mixing an
+       * envelope-returning API into it would make the web app's verbatim proxy rule ambiguous.
+       */
+      operations: `${API_BASE_PATH}/operations`,
+      /** Sub-paths within `operations`, so the route file and the browser client cannot disagree. */
+      operationsConsoles: "/consoles",
+      operationsSession: "/session",
       wildcard: "*",
       matchAll: "/*",
     },
@@ -792,6 +857,62 @@ export const config = {
   },
 
   /**
+   * The two operator consoles: a queue dashboard the api serves, and a database studio that runs as
+   * its own container.
+   *
+   * Neither is a product surface, and the reason is the same for both: they see *across* tenants.
+   * The queue holds every workspace's job payloads and the studio holds every workspace's rows, so
+   * putting either behind the ordinary session would hand any signed-in user everybody else's data.
+   * They are gated on a credential of their own instead, and each is **off** until one is set —
+   * absent credentials means the surface does not exist rather than that it stands open.
+   */
+  ops: {
+    queueDashboard: {
+      /** Shown in the dashboard's own header, so it is obvious whose queues these are. */
+      boardTitle: `${PRODUCT_NAME} queues`,
+      /**
+       * Long enough not to be worth guessing at, since this is the whole of what stands between the
+       * internet and a console that can read every tenant's job payloads and enqueue new work.
+       */
+      passwordMinLength: 16,
+      /**
+       * How the browser carries the fact that the operator password was accepted.
+       *
+       * A cookie rather than HTTP Basic, because Basic is answered by the *browser's* own credential
+       * dialog — an OS-chrome box on a themed product, which no CSS can reach and which cannot say
+       * what is being asked for or what it grants. The password is presented on a real page instead,
+       * and this is what the dashboard checks afterwards.
+       */
+      session: {
+        cookieName: "automend_ops",
+        /**
+         * A working day, and shorter than a user session on purpose: this grants far more than
+         * signing in does, so it should lapse over a weekend rather than persist for a month.
+         */
+        maxAgeSeconds: 8 * SECONDS_PER_HOUR,
+      },
+    },
+    databaseStudio: {
+      serviceName: STUDIO_SERVICE,
+      image: STUDIO_IMAGE,
+      containerPort: STUDIO_PORT,
+      /**
+       * Gateway keeps the connections you add and the session you signed in with here, so it has to
+       * be a mounted volume — without one, every restart asks for the database credentials again.
+       */
+      storePath: STUDIO_STORE_PATH,
+      /**
+       * The local stack's password, so the studio on a laptop is gated the way the deployed one is.
+       *
+       * Never blank: Gateway treats an absent master password as "accept any password" rather than as
+       * "no login", so a blank value produces a login box that lets everyone through. `tests/config.test.ts`
+       * fails if this is ever emptied.
+       */
+      localPassword: LOCAL_STUDIO_PASSWORD,
+    },
+  },
+
+  /**
    * OpenTelemetry log export. Automend ships logs to SigNoz, which is OTLP-native — the code
    * targets the OTLP protocol, not SigNoz specifically, so any OTLP backend works.
    */
@@ -861,6 +982,14 @@ export const config = {
   },
 
   validation: {
+    /**
+     * An upper bound on a *submitted* operator password, so a sign-in request cannot be used to hand
+     * the api an arbitrarily large body to hash. The minimum lives in `ops.queueDashboard`, because
+     * it constrains the deployment's configuration rather than the request.
+     */
+    opsPassword: {
+      maxLength: 200,
+    },
     flowName: {
       minLength: 1,
       maxLength: 200,
@@ -942,6 +1071,7 @@ export const config = {
       flows: APP_FLOWS_ROUTE,
       flowDetail: `${APP_FLOWS_ROUTE}/$${FLOW_ID_PARAM}`,
       connections: `${APP_ROUTE}/connections`,
+      operations: `${APP_ROUTE}/operations`,
     },
     /** The parameter name in `flowDetail`, so `useParams()` and the link cannot disagree. */
     flowIdParam: FLOW_ID_PARAM,
@@ -1042,6 +1172,8 @@ export const config = {
       }),
       redis: redisUrl(LOCAL_HOST, REDIS_CONTAINER_PORT),
       redisFromContainer: redisUrl(LOCAL_REDIS_SERVICE, REDIS_CONTAINER_PORT),
+      /** What `bun run dev:up --all` publishes the database studio on. */
+      studio: httpUrl(LOCAL_HOST, STUDIO_PORT),
       api: httpUrl(LOCAL_HOST, API_PORT),
       /**
        * The origin a *browser* uses, which is what OAuth redirects must be built from — never the

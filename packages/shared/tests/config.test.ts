@@ -132,6 +132,116 @@ describe("http configuration", () => {
   });
 });
 
+describe("operator consoles", () => {
+  test("the ops proxy pattern matches the prefix the consoles are mounted under", () => {
+    expect(config.http.routes.opsProxyPattern).toBe(`${config.http.routes.opsPrefix}/*`);
+  });
+
+  test("the queue dashboard sits under the ops prefix", () => {
+    expect(config.http.routes.queueDashboard.startsWith(`${config.http.routes.opsPrefix}/`)).toBe(true);
+  });
+
+  test("the queue dashboard is outside the versioned API, which answers with an envelope", () => {
+    // It serves HTML and a static bundle. Inside `/api/v1` it would be the one route there that does
+    // not answer with `{ data }` / `{ error }`, and the web app's `/api` proxy would reach it by a
+    // second path with different CORS treatment.
+    expect(config.http.routes.queueDashboard.startsWith(config.http.basePath)).toBe(false);
+    expect(config.http.routes.opsPrefix.startsWith(config.http.routes.apiProxyPrefix)).toBe(false);
+  });
+
+  test("the ops prefix does not collide with the other two the web app proxies", () => {
+    const prefixes = [
+      config.http.routes.apiProxyPrefix,
+      config.http.routes.otlpProxyPrefix,
+      config.http.routes.opsPrefix,
+    ];
+
+    expect(new Set(prefixes).size).toBe(prefixes.length);
+
+    for (const prefix of prefixes) {
+      for (const other of prefixes) {
+        // A prefix that is a prefix of another means one proxy rule shadows the other, and which one
+        // wins is registration order rather than anything a reader would predict.
+        expect(prefix === other || !other.startsWith(`${prefix}/`)).toBe(true);
+      }
+    }
+  });
+
+  test("the operations API is versioned like every other API route", () => {
+    // It is the JSON API *about* the consoles, not a console — so it belongs under the version prefix
+    // and answers with the envelope, unlike the dashboard itself.
+    expect(config.http.routes.operations.startsWith(config.http.basePath)).toBe(true);
+  });
+
+  test("the operations API is not inside the prefix the web app proxies verbatim", () => {
+    // `/ops` is forwarded with its path untouched because a dashboard's assets depend on it. An
+    // envelope-returning API in there would make that rule ambiguous.
+    expect(config.http.routes.operations.startsWith(`${config.http.routes.opsPrefix}/`)).toBe(false);
+  });
+
+  test("the operations sub-paths are relative, so the route file and the client agree", () => {
+    for (const subPath of [config.http.routes.operationsConsoles, config.http.routes.operationsSession]) {
+      expect(subPath.startsWith("/")).toBe(true);
+      expect(subPath.startsWith(config.http.basePath)).toBe(false);
+    }
+  });
+
+  test("the page that unlocks a console is inside the signed-in app", () => {
+    // Where the dashboard redirects an unauthenticated browser. Outside `/app` it would be reachable
+    // without signing in, and the redirect would land on the sign-in page instead.
+    expect(config.webClient.routes.operations.startsWith(`${config.webClient.routes.app}/`)).toBe(true);
+  });
+
+  test("the operator grant lapses sooner than a user session", () => {
+    // It grants far more than signing in does, so it should expire over a weekend rather than persist
+    // for a month.
+    expect(config.ops.queueDashboard.session.maxAgeSeconds).toBeLessThan(config.auth.session.expiresInSeconds);
+  });
+
+  test("a submitted operator password is bounded above as well as below", () => {
+    // The lower bound constrains the deployment's configuration; the upper bound constrains a request,
+    // so a sign-in attempt cannot hand the api an arbitrarily large body to hash.
+    expect(config.validation.opsPassword.maxLength).toBeGreaterThan(config.ops.queueDashboard.passwordMinLength);
+  });
+
+  test("the local studio password is never blank", () => {
+    // Not cosmetic. Drizzle Gateway reads an absent master password as "accept any password" — it still
+    // renders a login box and lets anything through, so a blank value ships a console that looks
+    // guarded and is not.
+    expect(config.ops.databaseStudio.localPassword.length).toBeGreaterThan(0);
+  });
+
+  test("a password long enough to matter is required of the queue dashboard", () => {
+    // The one guard on a console that reads every tenant's job payloads, so the bound exists rather
+    // than being left to whoever writes the .env.
+    expect(config.ops.queueDashboard.passwordMinLength).toBeGreaterThanOrEqual(16);
+  });
+
+  test("the database studio's image is pinned rather than tracking a moving tag", () => {
+    // `:latest` would let a redeploy change what is reading the database without a diff saying so.
+    expect(config.ops.databaseStudio.image).toContain(":");
+    expect(config.ops.databaseStudio.image.endsWith(":latest")).toBe(false);
+  });
+
+  test("the studio's local URL is built from its container port", () => {
+    expect(config.localDev.urls.studio).toContain(String(config.ops.databaseStudio.containerPort));
+  });
+
+  test("the studio's port does not collide with anything else the stack binds", () => {
+    const ports = [
+      config.services.api.defaultPort,
+      config.services.worker.defaultHealthPort,
+      config.services.web.defaultPort,
+      config.services.web.devServerPort,
+      config.localDev.postgres.containerPort,
+      config.localDev.redis.containerPort,
+      config.ops.databaseStudio.containerPort,
+    ];
+
+    expect(new Set(ports).size).toBe(ports.length);
+  });
+});
+
 describe("web client routes", () => {
   const webRoutes = Object.values(config.webClient.routes);
 

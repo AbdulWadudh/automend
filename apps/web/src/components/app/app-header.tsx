@@ -1,17 +1,49 @@
 import { config } from "@automend/shared";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authClient, signOut } from "@/lib/auth-client";
+import { fetchOpsConsoles, operationsQueryKeys } from "@/lib/operations-api";
 
 const { routes } = config.webClient;
+
+const NAV_LINK_CLASS =
+  "rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 data-[status=active]:bg-muted data-[status=active]:text-foreground";
 
 /** `data-status="active"` is set by the router on the link matching the current route. */
 const sections = [
   { to: routes.flows, label: "Flows" },
   { to: routes.connections, label: "Connections" },
 ];
+
+/**
+ * The Operations link, present only on a deployment that has an operator console.
+ *
+ * Asked of the API rather than assumed, because both consoles are optional: a deployment that
+ * configured neither would otherwise carry a permanent nav item leading to two "Not configured" cards.
+ * The query is shared with the page itself, so arriving there costs no second request.
+ */
+function OperationsLink() {
+  const consoles = useQuery({
+    queryKey: operationsQueryKeys.consoles(),
+    queryFn: ({ signal }) => fetchOpsConsoles(signal),
+    // A failure here is not worth a retry or an error state — the nav item simply does not appear.
+    retry: false,
+  });
+
+  if (!consoles.data?.queues.available && !consoles.data?.database.available) {
+    return null;
+  }
+
+  return (
+    <li>
+      <Link to={routes.operations} className={NAV_LINK_CLASS}>
+        Operations
+      </Link>
+    </li>
+  );
+}
 
 /**
  * The workspace the flows on screen belong to.
@@ -71,14 +103,12 @@ export function AppHeader() {
         <ul className="flex items-center gap-1 text-sm">
           {sections.map((section) => (
             <li key={section.to}>
-              <Link
-                to={section.to}
-                className="rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 data-[status=active]:bg-muted data-[status=active]:text-foreground"
-              >
+              <Link to={section.to} className={NAV_LINK_CLASS}>
                 {section.label}
               </Link>
             </li>
           ))}
+          <OperationsLink />
         </ul>
 
         <div className="ml-auto flex items-center gap-3">

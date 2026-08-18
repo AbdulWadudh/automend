@@ -19,6 +19,7 @@ import { Route as MarketingStatusRouteImport } from './routes/_marketing.status'
 import { Route as MarketingTosRouteImport } from './routes/_marketing.tos'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppConnectionsRouteImport } from './routes/app/connections'
+import { Route as AppOperationsRouteImport } from './routes/app/operations'
 import { Route as AppFlowsIndexRouteImport } from './routes/app/flows/index'
 import { Route as AppFlowsFlowIdRouteImport } from './routes/app/flows/$flowId'
 
@@ -71,6 +72,11 @@ const AppConnectionsRoute = AppConnectionsRouteImport.update({
   path: '/connections',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOperationsRoute = AppOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppFlowsIndexRoute = AppFlowsIndexRouteImport.update({
   id: '/flows/',
   path: '/flows/',
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/status': typeof MarketingStatusRoute
   '/tos': typeof MarketingTosRoute
   '/app/connections': typeof AppConnectionsRoute
+  '/app/operations': typeof AppOperationsRoute
   '/app/': typeof AppIndexRoute
   '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
   '/app/flows/': typeof AppFlowsIndexRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/status': typeof MarketingStatusRoute
   '/tos': typeof MarketingTosRoute
   '/app/connections': typeof AppConnectionsRoute
+  '/app/operations': typeof AppOperationsRoute
   '/': typeof MarketingIndexRoute
   '/app': typeof AppIndexRoute
   '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/_marketing/status': typeof MarketingStatusRoute
   '/_marketing/tos': typeof MarketingTosRoute
   '/app/connections': typeof AppConnectionsRoute
+  '/app/operations': typeof AppOperationsRoute
   '/_marketing/': typeof MarketingIndexRoute
   '/app/': typeof AppIndexRoute
   '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/tos'
     | '/app/connections'
+    | '/app/operations'
     | '/app/'
     | '/app/flows/$flowId'
     | '/app/flows/'
@@ -144,6 +154,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/tos'
     | '/app/connections'
+    | '/app/operations'
     | '/'
     | '/app'
     | '/app/flows/$flowId'
@@ -158,6 +169,7 @@ export interface FileRouteTypes {
     | '/_marketing/status'
     | '/_marketing/tos'
     | '/app/connections'
+    | '/app/operations'
     | '/_marketing/'
     | '/app/'
     | '/app/flows/$flowId'
@@ -243,6 +255,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppConnectionsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/operations': {
+      id: '/app/operations'
+      path: '/operations'
+      fullPath: '/app/operations'
+      preLoaderRoute: typeof AppOperationsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/flows/': {
       id: '/app/flows/'
       path: '/flows'
@@ -280,6 +299,7 @@ const MarketingRouteWithChildren = MarketingRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppConnectionsRoute: typeof AppConnectionsRoute
+  AppOperationsRoute: typeof AppOperationsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppFlowsFlowIdRoute: typeof AppFlowsFlowIdRoute
   AppFlowsIndexRoute: typeof AppFlowsIndexRoute
@@ -287,6 +307,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppConnectionsRoute: AppConnectionsRoute,
+  AppOperationsRoute: AppOperationsRoute,
   AppIndexRoute: AppIndexRoute,
   AppFlowsFlowIdRoute: AppFlowsFlowIdRoute,
   AppFlowsIndexRoute: AppFlowsIndexRoute,

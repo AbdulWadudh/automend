@@ -19,6 +19,7 @@ import { createLogger, type Logger } from "@automend/shared/logger";
 import { startLogTelemetry, type Telemetry } from "@automend/shared/telemetry";
 import { Redis } from "ioredis";
 import { env, serviceConfig } from "./config";
+import { createOpsSession, type OpsSession } from "./http/ops-session";
 
 export type ApiDependencies = {
   db: Database;
@@ -30,6 +31,23 @@ export type ApiDependencies = {
   availableConnectors: string[];
   /** Encrypts connector secrets. Held as bytes so the key is parsed and checked exactly once. */
   secretsKey: Buffer;
+  /**
+   * Checks the operator password and issues the grant the queue dashboard looks for, or `undefined`
+   * when this deployment configured no operator credentials.
+   *
+   * Undefined is the normal state, and it is the single fact that decides everything downstream: the
+   * dashboard is not mounted and the Operations page reports the console as unavailable. See
+   * `http/ops-session.ts` for what the password admits.
+   */
+  opsSession: OpsSession | undefined;
+  /**
+   * The database studio's public address, or undefined when this deployment has none.
+   *
+   * Only the deployment knows it: the studio runs on its own origin, so unlike the queue dashboard's
+   * path there is nothing to derive it from. Undefined means the Operations page reports it as
+   * unavailable rather than offering a link the browser cannot follow.
+   */
+  studioUrl: string | undefined;
   findLinkedAccount: (userId: string, providerId: string) => Promise<LinkedAccount | undefined>;
   /** Who a linked account belongs to, asked of the provider. Undefined if it cannot be reached. */
   fetchAccountProfile: (
@@ -95,6 +113,36 @@ function readConnectorCredentials(): ConnectorCredentialMap {
   }
 
   return credentials;
+}
+
+/**
+ * The operator session, and `undefined` for "the consoles are off".
+ *
+ * A half-configured pair is off, matching how a connector's credentials are read — but unlike a
+ * connector it is warned about, because the symptom is a console the operator just configured
+ * reporting itself unavailable, with nothing to suggest which half went missing.
+ */
+function createOperatorSession(logger: Logger): OpsSession | undefined {
+  const username = env.OPS_DASHBOARD_USER;
+  const password = env.OPS_DASHBOARD_PASSWORD;
+
+  if (username && password) {
+    return createOpsSession({
+      password,
+      signingSecret: env.AUTH_SECRET,
+      // The origin the *browser* uses, which is the connection the cookie actually travels over.
+      secureCookie: env.AUTH_BASE_URL.startsWith("https://"),
+    });
+  }
+
+  if (username || password) {
+    logger.warn(
+      { missing: username ? "OPS_DASHBOARD_PASSWORD" : "OPS_DASHBOARD_USER" },
+      "the operator consoles need both halves of the credentials and stay off with one",
+    );
+  }
+
+  return undefined;
 }
 
 /**
@@ -169,6 +217,8 @@ export function createApiDependencies(): ApiDependencies {
     enabledSocialProviders: google ? [config.auth.socialProviders.google.id] : [],
     availableConnectors,
     secretsKey,
+    opsSession: createOperatorSession(logger),
+    studioUrl: env.STUDIO_URL,
     findLinkedAccount: (userId, providerId) => findLinkedAccountForUser(database.db, userId, providerId),
     fetchAccountProfile: async (userId, providerId, accountId) => {
       try {

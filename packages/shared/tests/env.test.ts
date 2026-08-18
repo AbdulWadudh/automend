@@ -129,6 +129,86 @@ describe("loadApiEnv", () => {
   });
 });
 
+describe("loadApiEnv — the queue dashboard's credentials", () => {
+  const VALID_PASSWORD = "d".repeat(config.ops.queueDashboard.passwordMinLength);
+
+  test("both halves absent leaves the dashboard switched off", () => {
+    const env = loadApiEnv(REQUIRED_API_ENV);
+
+    expect(env.OPS_DASHBOARD_USER).toBeUndefined();
+    expect(env.OPS_DASHBOARD_PASSWORD).toBeUndefined();
+  });
+
+  test("both halves present switches it on", () => {
+    const env = loadApiEnv({
+      ...REQUIRED_API_ENV,
+      OPS_DASHBOARD_USER: "operator",
+      OPS_DASHBOARD_PASSWORD: VALID_PASSWORD,
+    });
+
+    expect(env.OPS_DASHBOARD_USER).toBe("operator");
+    expect(env.OPS_DASHBOARD_PASSWORD).toBe(VALID_PASSWORD);
+  });
+
+  test("an empty value is absent rather than a password of length zero", () => {
+    const env = loadApiEnv({ ...REQUIRED_API_ENV, OPS_DASHBOARD_USER: "", OPS_DASHBOARD_PASSWORD: "" });
+
+    expect(env.OPS_DASHBOARD_USER).toBeUndefined();
+    expect(env.OPS_DASHBOARD_PASSWORD).toBeUndefined();
+  });
+
+  test("a short password is refused rather than treated as good enough", () => {
+    // The point of the bound: unlike a half-configured OAuth provider, a weak value here does not
+    // fail closed — it would stand as the only guard on every tenant's job payloads.
+    const message = captureErrorMessage(() =>
+      loadApiEnv({
+        ...REQUIRED_API_ENV,
+        OPS_DASHBOARD_USER: "operator",
+        OPS_DASHBOARD_PASSWORD: "d".repeat(config.ops.queueDashboard.passwordMinLength - 1),
+      }),
+    );
+
+    expect(message).toContain("OPS_DASHBOARD_PASSWORD");
+    expect(message).toContain(String(config.ops.queueDashboard.passwordMinLength));
+  });
+
+  test("a short password is refused even with no username beside it", () => {
+    // Otherwise the length check is reachable only through the configuration that already works,
+    // and a typo'd username silently downgrades the password to unvalidated.
+    const message = captureErrorMessage(() => loadApiEnv({ ...REQUIRED_API_ENV, OPS_DASHBOARD_PASSWORD: "short" }));
+
+    expect(message).toContain("OPS_DASHBOARD_PASSWORD");
+  });
+
+  test("the failure never echoes the password", () => {
+    const password = "far-too-short";
+    const message = captureErrorMessage(() => loadApiEnv({ ...REQUIRED_API_ENV, OPS_DASHBOARD_PASSWORD: password }));
+
+    expect(message).not.toContain(password);
+  });
+
+  test("the studio's address is absent unless a deployment names one", () => {
+    // Undefined rather than defaulted: a default would put a link to localhost in every user's sidebar
+    // on a deployment that forgot to set it, and an address the browser cannot reach is worse than none.
+    expect(loadApiEnv(REQUIRED_API_ENV).STUDIO_URL).toBeUndefined();
+    expect(loadApiEnv({ ...REQUIRED_API_ENV, STUDIO_URL: "" }).STUDIO_URL).toBeUndefined();
+  });
+
+  test("the studio's address is kept when it is a URL the browser could follow", () => {
+    const studioUrl = "https://studio.example.com";
+
+    expect(loadApiEnv({ ...REQUIRED_API_ENV, STUDIO_URL: studioUrl }).STUDIO_URL).toBe(studioUrl);
+  });
+
+  test("a studio address that is not an http URL is refused rather than passed to the browser", () => {
+    const message = captureErrorMessage(() =>
+      loadApiEnv({ ...REQUIRED_API_ENV, STUDIO_URL: "postgres://studio:5432" }),
+    );
+
+    expect(message).toContain("STUDIO_URL");
+  });
+});
+
 describe("loadWorkerEnv", () => {
   test("defaults concurrency and the health port", () => {
     const env = loadWorkerEnv(REQUIRED_WORKER_ENV);

@@ -66,6 +66,7 @@ async function checkComposeFiles(): Promise<void> {
     SERVICE_USER_POSTGRES: config.localDev.postgres.user,
     SERVICE_PASSWORD_POSTGRES: config.localDev.postgres.password,
     SERVICE_PASSWORD_REDIS: config.localDev.postgres.password,
+    STUDIO_PASSWORD: config.localDev.postgres.password,
   };
 
   for (const composeFile of COMPOSE_FILES) {

@@ -91,7 +91,8 @@ curl http://localhost:8080/api/v1/health          # same report, through the web
 curl -X POST http://localhost:3000/api/v1/hooks/<flowId>/<path>  # a flow's webhook — no session, any method
 ```
 
-Tear down with `docker compose down` (add `-v` to also drop the Postgres and Dragonfly volumes).
+Tear down with `docker compose down` (add `-v` to also drop the Postgres, Dragonfly and studio
+volumes).
 
 > `docker-compose.yml` is **local development only**. Production is deployed by Coolify from each
 > app's own Dockerfile — see [Deployment](#deployment).
@@ -218,6 +219,10 @@ Defaults come from `config.ts`; `env.ts` never hardcodes one.
 | `WORKER_CONCURRENCY` | worker                  | no       | `5`                                | 1–100                                                     |
 | `WEB_PORT`           | web container           | no       | `8080`                             |                                                           |
 | `API_URL`            | web container           | **yes**  | —                                  | Proxy target; server-side only, never sent to the browser |
+| `OPS_DASHBOARD_USER` | api                     | no       | empty                              | With the password, switches the queue dashboard on at `/ops/queues` |
+| `OPS_DASHBOARD_PASSWORD` | api                 | no       | empty                              | ≥16 chars; either half missing leaves the dashboard unmounted |
+| `STUDIO_URL`         | api                     | no       | empty                              | The studio's address **as the browser sees it**, so Operations can link to it |
+| `STUDIO_IMAGE` / `STUDIO_PORT` / `STUDIO_PASSWORD` | compose only | no | pinned image, `4983`, local value | The studio container; `STUDIO_PASSWORD` becomes its `MASTERPASS` and must not be blank |
 
 `.env` files are git-ignored and must never be committed. Secrets are never logged: the Pino
 logger redacts connection strings, tokens, passwords and auth headers at every level.
@@ -283,6 +288,94 @@ burning the job's remaining attempts is pointless.
 
 ---
 
+## Operator consoles
+
+Two surfaces for looking at what the system is actually doing: a **queue dashboard** for the BullMQ
+queue and a **database studio** for Postgres. Both are off until a deployment sets a credential.
+
+Both are reached from **Operations** in the app's nav, at `/app/operations`. The link only appears on
+a deployment that has configured at least one of them.
+
+Neither console is behind the ordinary session, and the reason is the same for both: they read
+**across tenants**. The queue holds every workspace's job payloads and the studio holds every
+workspace's rows, so a session would scope nothing — it would hand any signed-in user everybody
+else's data. Each carries its own administrative credential instead.
+
+### Queue dashboard — `/ops/queues`
+
+[Bull Board](https://github.com/felixmosh/bull-board), mounted by the API and reached on the web
+app's own origin, because the web server proxies the `/ops` prefix onward the same way it proxies
+`/api`. Set both halves to switch it on:
+
+```bash
+OPS_DASHBOARD_USER=operator
+OPS_DASHBOARD_PASSWORD=$(openssl rand -base64 24)   # at least 16 characters
+```
+
+Then open **Operations** in the app and enter that password. It is exchanged for a signed, `HttpOnly`
+cookie that lapses after 8 hours, and the dashboard checks the cookie — a browser that navigates
+straight to `/ops/queues` without one is sent back to the Operations page.
+
+**There is no HTTP Basic auth here, deliberately.** Basic auth is answered by the *browser's* own
+credential dialog: an operating-system box drawn over a themed product, which no stylesheet can
+reach, which cannot say what is being asked for or what it grants, and which offers nothing when you
+get it wrong. The first version of this used it; the page replaced it.
+
+The cookie is signed with the deployment secret **and the operator password**, so rotating
+`OPS_DASHBOARD_PASSWORD` invalidates every grant already handed out. Its age is checked against the
+timestamp inside the signed value rather than only against `Max-Age`, which is the client's to discard.
+
+With either half of the credential missing the route is not mounted at all — an unconfigured
+deployment answers the ordinary 404 rather than advertising that a console is there and only the
+password is missing. A password under 16 characters stops the API at startup.
+
+What it is worth having for: which jobs are waiting, which failed and *why*, and retrying one once
+the cause is fixed. The outbox relay already reports a row it has given up on, but "the run exists,
+it looks queued, and nothing will ever execute it" is a state you diagnose by looking at the queue.
+
+**Treat the credential as administrative.** The dashboard is deliberately not read-only — retrying
+and removing jobs is the point — which also means whoever has the password can enqueue a job the
+worker will run. A malformed payload is rejected by the shared Zod schema, but a well-formed one is a
+real execution of a real tenant's flow. On the open internet, put Coolify's IP allowlist or its own
+Basic Auth in front of the domain as well.
+
+The dashboard's own asset URLs are relative to the path it is mounted at, which is why the `/ops`
+proxy forwards the prefix **verbatim** while the `/otlp` proxy strips its own. Stripping it here
+serves the page and then 404s every script the page asks for.
+
+### Database studio — its own origin
+
+[Drizzle Gateway](https://gateway.drizzle.team) — Drizzle Studio packaged to be self-hosted. It runs
+as a container rather than as `drizzle-kit studio`, because that command serves its data to a *hosted*
+front-end at `local.drizzle.studio` over a connection to `127.0.0.1`: a laptop tool that depends on a
+third party being up, and there is no terminal on the deployed server to run it from anyway.
+
+```bash
+docker compose up studio     # http://localhost:4983
+```
+
+Sign in with `STUDIO_PASSWORD` from your `.env`, then add a connection in its UI: paste the value of
+`DATABASE_URL_FROM_CONTAINER`, since from inside that container `localhost` is the container itself.
+The connection is saved in the `studio-data` volume, which is why `STORE_PATH` and that volume's mount
+point have to agree; `packages/shared/tests/compose.test.ts` fails if they drift.
+
+> **Never leave `STUDIO_PASSWORD` blank.** Gateway's login handler is `if (!MASTERPASS) return
+> success` — with no master password it still renders a password box and **accepts anything typed
+> into it**, so the studio reads as protected while being wide open. `.env.example` ships a local
+> throwaway value for that reason, and both compose files refuse to start without one.
+
+The studio is **not** proxied under a prefix of the web app the way the queue dashboard is: Gateway
+serves its assets from the root of whatever origin it is on. In the Coolify stack it therefore gets a
+domain of its own — set `STUDIO_URL` to that domain so the Operations page can link to it, and layer
+an IP allowlist on it unless the stack is private. Changing `STUDIO_PASSWORD` needs
+`docker compose up -d --force-recreate studio`; a running container keeps the value it started with.
+
+For a database *outside* the compose stack there is still
+`bun run --cwd packages/db db:studio`, which runs `drizzle-kit studio`. It depends on Drizzle's hosted
+front-end, so treat it as a convenience rather than the supported path.
+
+---
+
 ## Observability
 
 Every service logs to **stdout as structured JSON** *and* exports the same records over OTLP to
@@ -334,7 +427,11 @@ Each app has its own `Dockerfile` and is deployed independently by Coolify.
   and answer `503` when Postgres or Redis is unreachable, so Coolify can restart on a genuine
   outage rather than a hardcoded `200`. Point Coolify's health check at `/health`.
 - Logs are structured JSON on stdout (Pino). There is no file logging.
-- No service assumes local disk persistence — containers are disposable.
+- No service assumes local disk persistence — containers are disposable. The one exception is the
+  database studio, whose saved connection lives in a volume; it holds no application data.
+- The [operator consoles](#operator-consoles) deploy with the stack: the queue dashboard rides on the
+  api and appears at `/ops/queues` once `OPS_DASHBOARD_*` is set, and the studio is its own service
+  with its own domain. Both read across tenants — put an IP allowlist in front of them.
 
 Build a single image manually:
 

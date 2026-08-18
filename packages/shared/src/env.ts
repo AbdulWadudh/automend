@@ -103,6 +103,35 @@ const optionalSecretSchema = z
   .optional()
   .transform((value) => (value && value.length > 0 ? value : undefined));
 
+/**
+ * The queue dashboard's password.
+ *
+ * Optional, because the dashboard is simply not mounted without one — but a *short* one is refused
+ * rather than accepted. The usual "half-configured counts as off" treatment would let a five
+ * character password stand as the only guard on a console that can read every tenant's job
+ * payloads, so the length is checked even though the variable itself may be absent.
+ */
+const opsDashboardPasswordSchema = optionalSecretSchema.refine(
+  (value) => value === undefined || value.length >= config.ops.queueDashboard.passwordMinLength,
+  {
+    message: `OPS_DASHBOARD_PASSWORD must be at least ${config.ops.queueDashboard.passwordMinLength} characters`,
+  },
+);
+
+/**
+ * An absent URL, or one that is genuinely a URL of the expected scheme. Absent is a valid answer —
+ * every caller of this treats it as "this deployment does not have that thing".
+ */
+function optionalUrlSchema(variableName: string, allowedSchemes: readonly string[]) {
+  return z
+    .string()
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined))
+    .refine((value) => value === undefined || allowedSchemes.some((scheme) => value.startsWith(`${scheme}://`)), {
+      message: `${variableName} must start with ${allowedSchemes.map((scheme) => `${scheme}://`).join(" or ")}`,
+    });
+}
+
 const apiEnvSchema = baseEnvSchema.extend({
   DATABASE_URL: databaseUrlSchema,
   REDIS_URL: redisUrlSchema,
@@ -129,6 +158,24 @@ const apiEnvSchema = baseEnvSchema.extend({
   SLACK_CLIENT_SECRET: optionalSecretSchema,
   DISCORD_CLIENT_ID: optionalSecretSchema,
   DISCORD_CLIENT_SECRET: optionalSecretSchema,
+  /**
+   * Credentials for the queue dashboard, and the switch that turns it on.
+   *
+   * Both halves or neither: with either missing the dashboard is not mounted, so a deployment that
+   * has not decided about it is closed rather than open. The api logs which of the two it was
+   * missing, because the alternative symptom is a 404 on a route the operator believes exists.
+   */
+  OPS_DASHBOARD_USER: optionalSecretSchema,
+  OPS_DASHBOARD_PASSWORD: opsDashboardPasswordSchema,
+  /**
+   * The database studio's public address, which only the deployment knows.
+   *
+   * The studio runs on its own origin — Drizzle Gateway serves its assets from the root, so it cannot
+   * be proxied under a path prefix the way the queue dashboard is — and it is deliberately *not*
+   * defaulted. A default would put a link to `localhost` in every user's sidebar on a deployment that
+   * forgot to set it, and an address the browser cannot reach is worse than no link at all.
+   */
+  STUDIO_URL: optionalUrlSchema("STUDIO_URL", config.env.urlSchemes.api),
 });
 
 /**

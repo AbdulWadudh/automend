@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, rootEnvDirectory, "");
 
   /**
-   * The dev server proxies the API and OTLP prefixes rather than the browser calling them
+   * The dev server proxies the API, ops and OTLP prefixes rather than the browser calling them
    * cross-origin. The production container does the same thing (see `server.ts`), so application
    * code only ever uses relative URLs and no upstream address is baked into the bundle.
    */
@@ -69,6 +69,9 @@ export default defineConfig(({ mode }) => {
       port: config.services.web.devServerPort,
       proxy: {
         [config.http.routes.apiProxyPrefix]: { target: apiProxyTarget, changeOrigin: true },
+        // The api serves the queue dashboard here. Deliberately no `rewrite`: the dashboard builds
+        // its asset URLs from the prefix, so removing it breaks every one of them.
+        [config.http.routes.opsPrefix]: { target: apiProxyTarget, changeOrigin: true },
         [config.http.routes.otlpProxyPrefix]: {
           target: otlpProxyTarget,
           changeOrigin: true,

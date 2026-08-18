@@ -1,16 +1,17 @@
 /**
  * Production server for the web app.
  *
- * Serves the built bundle and proxies two prefixes onward:
+ * Serves the built bundle and proxies three prefixes onward:
  *
  * - the API prefix, to the API service
+ * - the ops prefix, to the API service as well — that is where it mounts the queue dashboard
  * - the OTLP prefix, to the telemetry collector
  *
- * Both exist for the same reason: the browser only ever calls this origin, so neither the API
+ * They exist for the same reason: the browser only ever calls this origin, so neither the API
  * address nor the collector address is compiled into the bundle, and the collector needs no CORS
  * configuration and no public exposure. Targets are read from the environment at container start.
  *
- * The Vite dev server proxies the same two prefixes via `server.proxy` in `vite.config.ts`.
+ * The Vite dev server proxies the same three prefixes via `server.proxy` in `vite.config.ts`.
  */
 
 import { API_ERROR_CODES, config } from "@automend/shared";
@@ -50,17 +51,29 @@ function unavailable(message: string): Response {
   return Response.json({ error: { code: API_ERROR_CODES.DEPENDENCY_UNAVAILABLE, message } }, { status: 503 });
 }
 
-app.all(config.http.routes.apiProxyPattern, async (c) => {
-  const incomingUrl = new URL(c.req.url);
-  const targetUrl = new URL(`${incomingUrl.pathname}${incomingUrl.search}`, env.API_URL);
+/**
+ * Both prefixes the API serves, forwarded with the path left exactly as it arrived.
+ *
+ * The ops prefix in particular must not be rewritten: the queue dashboard renders its own script and
+ * API URLs from the path it was mounted at, so a stripped prefix serves the page and then 404s
+ * everything the page asks for.
+ */
+function forwardToApi(prefixPattern: string): void {
+  app.all(prefixPattern, async (c) => {
+    const incomingUrl = new URL(c.req.url);
+    const targetUrl = new URL(`${incomingUrl.pathname}${incomingUrl.search}`, env.API_URL);
 
-  try {
-    return await forwardRequest(c.req.raw, targetUrl);
-  } catch (error) {
-    logger.error({ err: error, path: incomingUrl.pathname }, "api proxy request failed");
-    return unavailable("The API is unreachable");
-  }
-});
+    try {
+      return await forwardRequest(c.req.raw, targetUrl);
+    } catch (error) {
+      logger.error({ err: error, path: incomingUrl.pathname }, "api proxy request failed");
+      return unavailable("The API is unreachable");
+    }
+  });
+}
+
+forwardToApi(config.http.routes.apiProxyPattern);
+forwardToApi(config.http.routes.opsProxyPattern);
 
 /**
  * Browser telemetry. `/otlp/v1/logs` on this origin becomes `/v1/logs` on the collector, so the

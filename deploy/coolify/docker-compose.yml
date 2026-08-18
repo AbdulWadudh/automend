@@ -112,6 +112,20 @@ services:
       SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      # Optional, and both halves or nothing: with either unset the queue dashboard is not mounted.
+      # Reachable at ${PUBLIC_WEB_URL}/ops/queues once set, because the web app proxies that prefix
+      # onward the same way it proxies /api.
+      #
+      # This is an administrative credential, not a user one. The queue holds every workspace's job
+      # payloads, and the dashboard can enqueue work the worker will run — so treat it like
+      # SECRETS_KEY, and put Coolify's IP allowlist or its own Basic Auth in front of the domain if
+      # the stack is on the open internet.
+      OPS_DASHBOARD_USER: ${OPS_DASHBOARD_USER:-}
+      OPS_DASHBOARD_PASSWORD: ${OPS_DASHBOARD_PASSWORD:-}
+      # The studio's public address as the *browser* sees it, which is the domain Coolify generated for
+      # the `studio` service below — read it off that service and paste it here. Left unset, the
+      # Operations page reports the studio as unavailable rather than linking somewhere unreachable.
+      STUDIO_URL: ${STUDIO_URL:-}
       OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:?set this to your SigNoz collector base URL}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
@@ -185,6 +199,39 @@ services:
       api:
         condition: service_healthy
 
+  # The database studio: Drizzle Gateway, which is Drizzle Studio packaged to be self-hosted.
+  #
+  # It exists because there is no terminal on this server. `drizzle-kit studio` serves its data to a
+  # hosted front-end over a connection to 127.0.0.1, which is a laptop tool; this is the same UI as a
+  # container, so reading and editing the database is something the stack itself provides.
+  #
+  # It is a full database console on a public domain, and MASTERPASS is the whole of what guards it.
+  # Required rather than defaulted, and the reason is sharper than "no password": Gateway's login
+  # handler is `if (!MASTERPASS) return success`, so an unset one still shows a password box and
+  # accepts anything typed into it. That deploys a console that looks guarded and is not.
+  # Put Coolify's IP allowlist in front of this service's domain unless the stack is private.
+  #
+  # It is given no DATABASE_URL: Gateway stores the connections you add in its own volume, so add
+  # one through its UI with the same in-network address the api uses (postgres:5432).
+  studio:
+    image: ghcr.io/drizzle-team/gateway:1.4.1
+    restart: unless-stopped
+    environment:
+      # Its own domain, not a path under the web app's: Gateway serves its assets from the root of
+      # whatever origin it is on, so it cannot be proxied under a prefix the way /ops/queues is.
+      SERVICE_FQDN_STUDIO_4983: /
+      PORT: 4983
+      # Must match the volume below. Without a mounted store, every restart of this container loses
+      # the saved connection and asks for the database credentials again.
+      STORE_PATH: /app
+      MASTERPASS: "${STUDIO_PASSWORD:?generate one with openssl rand -base64 24}"
+    volumes:
+      - studio-data:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   redis-data:
+  studio-data:
