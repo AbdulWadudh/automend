@@ -35,6 +35,7 @@ should explain what git cannot:
 
 | Date | Entry | Type |
 |---|---|---|
+| 2026-08-18 | [What Coolify does with the domain, the port and a `:?` default](2026/08/2026-08-18-coolify-domain-port-and-secrets-key.md) | docs |
 | 2026-08-18 | [Signing in works again: the web proxy hands redirects to the browser](2026/08/2026-08-18-proxy-passes-redirects-through.md) | fix |
 | 2026-08-18 | [A failing health check says what it saw](2026/08/2026-08-18-health-probe-says-why.md) | fix |
 | 2026-08-18 | [The public web address is set explicitly, not read from a Coolify magic variable](2026/08/2026-08-18-coolify-public-web-url.md) | fix |
