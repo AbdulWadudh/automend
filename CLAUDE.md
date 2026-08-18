@@ -209,7 +209,7 @@ literal value, because a test that reads its expectation from config asserts not
 `.env.example` is **generated** from `config.ts` by `bun run config:sync` — do not hand-edit it.
 `docker-compose.yml` then reads those variables through `${VAR}` substitution rather than
 restating any port, credential or URL. `bun run config:check` fails when the file is stale; run it
-in CI.
+before pushing.
 
 Adding an overridable value: put the default in `config.ts`, add the variable to `env.ts` and to
 the generator's section list, run `config:sync`, then reference it in `docker-compose.yml` and the

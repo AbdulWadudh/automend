@@ -5,7 +5,7 @@
  * substitution, so generating it is what stops ports and credentials being written down twice.
  *
  *   bun run config:sync     rewrite .env.example
- *   bun run config:check    fail if it is out of date (use in CI)
+ *   bun run config:check    fail if it is out of date
  */
 
 import { fileURLToPath } from "node:url";

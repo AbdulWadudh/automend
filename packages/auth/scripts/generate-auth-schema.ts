@@ -2,7 +2,7 @@
  * Regenerates `packages/db/src/auth-schema.ts` from the Better-Auth configuration.
  *
  *   bun run auth:schema         rewrite the schema
- *   bun run auth:schema:check   fail if it is out of date (use in CI)
+ *   bun run auth:schema:check   fail if it is out of date
  *
  * Better-Auth decides which tables and columns it needs from the options it is given — enabling a
  * plugin adds tables, and a version bump can add a column. `getAuthTables` reports that shape from

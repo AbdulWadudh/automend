@@ -165,9 +165,9 @@ Nothing to export by hand.
 | `bun run verify`           | Every gate a deploy would fail on: lint, types, tests, both compose files, all three images, migrations against a populated database |
 | `bun run verify --fast`    | The same, without the gates that build images (seconds, not minutes) |
 | `bun run config:sync`      | Regenerate `.env.example` from `config.ts`                     |
-| `bun run config:check`     | Fail if `.env.example` is stale (use in CI)                    |
+| `bun run config:check`     | Fail if `.env.example` is stale (run before pushing)                    |
 | `bun run auth:schema`      | Regenerate the Better-Auth tables from the auth options        |
-| `bun run auth:schema:check`| Fail if those tables are stale (use in CI)                     |
+| `bun run auth:schema:check`| Fail if those tables are stale (run before pushing)                     |
 | `bun run telemetry:verify` | Send marked log records to the collector and report acceptance |
 | `bun run build`            | Production build (only the web app has one)                    |
 | `bun run db:generate`      | Generate a migration from schema changes                       |
