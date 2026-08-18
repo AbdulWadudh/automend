@@ -1,0 +1,9 @@
+# Line endings are normalised to LF in the repository and in the working tree.
+#
+# Without this, core.autocrlf=true writes CRLF on checkout while Biome is configured for LF, so
+# every branch switch leaves `bun run check` failing on files nobody edited.
+* text=auto eol=lf
+
+# Generated, and noisy in review.
+bun.lock linguist-generated=true
+apps/web/src/routeTree.gen.ts linguist-generated=true

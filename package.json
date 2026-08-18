@@ -25,6 +25,7 @@
     "auth:schema": "bun run --cwd packages/auth auth:schema",
     "auth:schema:check": "bun run --cwd packages/auth auth:schema:check",
     "telemetry:verify": "bun run --cwd packages/shared telemetry:verify",
+    "verify": "bun run scripts/verify.ts",
     "preflight": "bun run --cwd apps/worker preflight",
     "db:generate": "bun run --cwd packages/db db:generate",
     "db:migrate": "bun run --cwd packages/db db:migrate"

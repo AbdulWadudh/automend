@@ -1,0 +1,37 @@
+# Runs the same gates as `bun run verify` on a laptop.
+#
+# The point is that nothing reaches a deploy unverified: every failure this workflow catches used to
+# be found by Coolify instead, ten minutes at a time.
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The migration gate replays this branch over the release it would deploy on top of, so
+          # that commit has to be in the clone.
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run verify
+        env:
+          # What this change would land on: the PR's base, or the commit main moved from. An
+          # unusable value (a new branch pushes all-zeros) makes the migration gate skip rather
+          # than fail, which is the honest outcome — there is nothing to replay over.
+          VERIFY_REFERENCE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}

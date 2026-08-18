@@ -161,6 +161,8 @@ Nothing to export by hand.
 | `bun test`                 | Unit tests (`bun test`)                                        |
 | `bun run check`            | Biome lint + format check                                      |
 | `bun run check:fix`        | Biome lint + format, writing fixes                             |
+| `bun run verify`           | Every gate a deploy would fail on: lint, types, tests, both compose files, all three images, migrations against a populated database |
+| `bun run verify --fast`    | The same, without the gates that build images (seconds, not minutes) |
 | `bun run config:sync`      | Regenerate `.env.example` from `config.ts`                     |
 | `bun run config:check`     | Fail if `.env.example` is stale (use in CI)                    |
 | `bun run auth:schema`      | Regenerate the Better-Auth tables from the auth options        |
