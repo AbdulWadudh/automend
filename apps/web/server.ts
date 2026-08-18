@@ -15,6 +15,7 @@
 
 import { API_ERROR_CODES, config } from "@automend/shared";
 import { loadWebServerEnv } from "@automend/shared/env";
+import { forwardRequest } from "@automend/shared/http-proxy";
 import { createLogger } from "@automend/shared/logger";
 import { startLogTelemetry } from "@automend/shared/telemetry";
 import { Hono } from "hono";
@@ -45,30 +46,6 @@ const app = new Hono();
 
 app.get(config.http.routes.health, (c) => c.json({ data: { service: serviceConfig.name, status: "healthy" } }));
 
-const STRIPPED_REQUEST_HEADERS = config.http.proxy.strippedRequestHeaders;
-
-/**
- * Forwards a request upstream, preserving method and body but rebuilding the headers.
- *
- * The inbound `Host` header names this origin, so it has to go: an upstream behind a CDN routes
- * by Host and answers 403 for one it does not recognise. `fetch` derives the correct Host from
- * the target URL once the stale one is removed.
- */
-async function proxyTo(request: Request, targetUrl: URL): Promise<Response> {
-  const headers = new Headers(request.headers);
-
-  for (const header of STRIPPED_REQUEST_HEADERS) {
-    headers.delete(header);
-  }
-
-  return await fetch(targetUrl.toString(), {
-    method: request.method,
-    headers,
-    body: request.body,
-    redirect: "follow",
-  });
-}
-
 function unavailable(message: string): Response {
   return Response.json({ error: { code: API_ERROR_CODES.DEPENDENCY_UNAVAILABLE, message } }, { status: 503 });
 }
@@ -78,7 +55,7 @@ app.all(config.http.routes.apiProxyPattern, async (c) => {
   const targetUrl = new URL(`${incomingUrl.pathname}${incomingUrl.search}`, env.API_URL);
 
   try {
-    return await proxyTo(c.req.raw, targetUrl);
+    return await forwardRequest(c.req.raw, targetUrl);
   } catch (error) {
     logger.error({ err: error, path: incomingUrl.pathname }, "api proxy request failed");
     return unavailable("The API is unreachable");
@@ -95,7 +72,7 @@ app.all(config.http.routes.otlpProxyPattern, async (c) => {
   const targetUrl = new URL(`${collectorPath}${incomingUrl.search}`, env.OTEL_EXPORTER_OTLP_ENDPOINT);
 
   try {
-    return await proxyTo(c.req.raw, targetUrl);
+    return await forwardRequest(c.req.raw, targetUrl);
   } catch (error) {
     // Logged at warn: losing browser telemetry must not read as an application outage.
     logger.warn({ err: error, path: incomingUrl.pathname }, "otlp proxy request failed");

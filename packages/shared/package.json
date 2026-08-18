@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./crypto": "./src/crypto.ts",
     "./env": "./src/env.ts",
+    "./http-proxy": "./src/http-proxy.ts",
     "./logger": "./src/logger.ts",
     "./telemetry": "./src/telemetry.ts"
   },
