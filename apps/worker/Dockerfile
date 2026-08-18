@@ -36,7 +36,8 @@ WORKDIR /app/apps/worker
 # The worker serves no traffic of its own; this port exposes its health endpoint only.
 EXPOSE 3002
 
+# The probe prints what it saw when it fails, which is what a deploy log has to work from.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD bun --eval "fetch('http://127.0.0.1:'+(process.env.WORKER_HEALTH_PORT||3002)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD ["bun", "run", "/app/packages/shared/scripts/health-probe.ts", "worker"]
 
 CMD ["bun", "run", "src/index.ts"]
