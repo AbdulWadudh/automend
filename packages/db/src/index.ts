@@ -47,6 +47,7 @@ export {
   markOutboxFailed,
   markOutboxPublished,
   pruneOutboxPublishedBefore,
+  resetStuckOutboxRows,
 } from "./outbox";
 export type { CreatedRun, CreateRunValues, FinishRunValues, RunSummary } from "./runs";
 export {

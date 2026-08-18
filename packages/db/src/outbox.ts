@@ -81,11 +81,35 @@ export async function markOutboxPublished(db: Database, ids: readonly string[]):
 /**
  * Records why a publish failed, leaving the row unpublished so the next pass retries it.
  *
- * The message is kept because a row that has stopped retrying is otherwise a silent hole: the run exists,
- * nothing will execute it, and there is nothing to explain why.
+ * The message is kept because a row that has stopped retrying is otherwise a silent hole: the run exists, nothing
+ * will execute it, and there is nothing to explain why.
+ *
+ * An empty reason is refused rather than written. A row found at its attempt limit with `last_error` null is
+ * undiagnosable — it is the exact state this column exists to prevent — and it is reachable whenever something
+ * throws a value with no `message`, so the placeholder is more useful than the null.
  */
 export async function markOutboxFailed(db: Database, id: string, message: string): Promise<void> {
-  await db.update(flowRunOutbox).set({ lastError: message }).where(eq(flowRunOutbox.id, id));
+  const reason = message.trim().length > 0 ? message : "the publish failed without saying why";
+
+  await db.update(flowRunOutbox).set({ lastError: reason }).where(eq(flowRunOutbox.id, id));
+}
+
+/**
+ * Gives rows that exhausted their attempts another chance.
+ *
+ * Without this a stuck row is stuck for good, and the only remedy is hand-written SQL against production — so the
+ * relay could report "needs attention" while offering nothing to do about it. The attempt count is reset rather
+ * than raised so the row gets a full budget, and `last_error` is kept: what failed last time is the most useful
+ * thing to know if it fails again.
+ */
+export async function resetStuckOutboxRows(db: Database, maxAttempts: number): Promise<number> {
+  const reset = await db
+    .update(flowRunOutbox)
+    .set({ attempts: 0 })
+    .where(and(isNull(flowRunOutbox.publishedAt), sql`${flowRunOutbox.attempts} >= ${maxAttempts}`))
+    .returning({ id: flowRunOutbox.id });
+
+  return reset.length;
 }
 
 /**

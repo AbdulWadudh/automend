@@ -25,6 +25,23 @@ import { config, flowExecutionJobSchema } from "@automend/shared";
 import type { Logger } from "@automend/shared/logger";
 import type { Queue } from "bullmq";
 
+/**
+ * A thrown value as a sentence.
+ *
+ * A `catch` receives whatever was thrown, which need not be an `Error` — a rejected `fetch`, a library throwing a
+ * string, a `null`. Reading `.message` off those gives `undefined`, and storing that loses the only record of why
+ * a run will never execute.
+ */
+function describeFailure(error: unknown): string {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message;
+  }
+
+  const described = String(error);
+
+  return described === "[object Object]" ? "an unrecognised failure" : described;
+}
+
 export type OutboxRelay = {
   /** Runs one pass. Exposed so a test can drive it without waiting for the interval. */
   drainOnce: () => Promise<number>;
@@ -70,7 +87,11 @@ export function createOutboxRelay({ db, queue, logger }: CreateOutboxRelayOption
     } catch (error) {
       // Left unpublished, so the next pass retries it. The reason is kept because a row that has stopped retrying
       // is otherwise a silent hole: the run exists, looks queued, and nothing will ever execute it.
-      await markOutboxFailed(db, entry.id, (error as Error).message);
+      //
+      // `describeFailure` rather than `error.message` because a thrown value need not be an `Error` — and reading
+      // `.message` off something that is not one records `null`, producing precisely the undiagnosable row this
+      // column exists to prevent.
+      await markOutboxFailed(db, entry.id, describeFailure(error));
       logger.warn({ err: error, outboxId: entry.id, runId: entry.runId }, "could not queue a run");
 
       return false;
@@ -87,8 +108,16 @@ export function createOutboxRelay({ db, queue, logger }: CreateOutboxRelayOption
     const published: string[] = [];
 
     for (const entry of claimed) {
-      if (await publish(entry)) {
-        published.push(entry.id);
+      // Each entry is isolated. `claimOutboxBatch` has already spent an attempt on every row in the batch, so an
+      // unexpected throw escaping this loop would abandon the rest of them with an attempt spent and no reason
+      // recorded — which is how a row reaches its limit with `last_error` null and nothing to explain it.
+      try {
+        if (await publish(entry)) {
+          published.push(entry.id);
+        }
+      } catch (error) {
+        await markOutboxFailed(db, entry.id, describeFailure(error));
+        logger.error({ err: error, outboxId: entry.id, runId: entry.runId }, "publishing a run threw unexpectedly");
       }
     }
 
@@ -115,8 +144,12 @@ export function createOutboxRelay({ db, queue, logger }: CreateOutboxRelayOption
 
       if (stuck > 0) {
         // Reported every pass rather than once, because this is the failure mode of the outbox pattern that is
-        // invisible from the outside — the runs exist, they look queued, and nothing will execute them.
-        logger.error({ stuck, maxAttempts: outbox.maxAttempts }, "runs are stuck in the outbox and need attention");
+        // invisible from the outside — the runs exist, they look queued, and nothing will execute them. The
+        // remedy is named, because "needs attention" with nothing to do about it is not a useful alert.
+        logger.error(
+          { stuck, maxAttempts: outbox.maxAttempts },
+          "runs are stuck in the outbox and will not be retried — see last_error on flow_run_outbox, then call resetStuckOutboxRows",
+        );
       }
     } catch (error) {
       // Swallowed after logging: an unhandled rejection here would take the worker down and stop it processing the

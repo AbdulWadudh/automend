@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { config } from "@automend/shared";
 import { and, eq, isNull } from "drizzle-orm";
-import { claimOutboxBatch, markOutboxFailed, markOutboxPublished } from "../src/outbox";
+import {
+  claimOutboxBatch,
+  countStuckOutboxRows,
+  markOutboxFailed,
+  markOutboxPublished,
+  resetStuckOutboxRows,
+} from "../src/outbox";
 import { abandonPendingRun, createFlowRunWithOutbox, finishFlowRun, listRunsForFlow, startFlowRun } from "../src/runs";
 import { flowRunOutbox, flows } from "../src/schema";
 import { claimStepRun, completeStepRun, findSucceededStepOutputs, nextAttemptForRun } from "../src/step-runs";
@@ -399,6 +405,56 @@ describeWithDatabase("run persistence", () => {
       const [row] = await context.db.select().from(flowRunOutbox).where(eq(flowRunOutbox.runId, created.id));
 
       expect(row?.attempts).toBe(config.outbox.maxAttempts);
+    });
+
+    /**
+     * Found in the dev database: two rows at their attempt limit with `last_error` null, which is the exact state
+     * the column exists to prevent — a run that will never execute and nothing to say why. Reachable whenever
+     * something throws a value with no `message`, since reading `.message` off it stores null.
+     */
+    test("a failure with no message still records a reason", async () => {
+      const created = await createFlowRunWithOutbox(context.db, runValues(`noreason-${crypto.randomUUID()}`));
+      const claimed = await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+      const mine = claimed.find((entry) => entry.runId === created.id);
+
+      await markOutboxFailed(context.db, mine?.id ?? "", "");
+
+      const [row] = await context.db.select().from(flowRunOutbox).where(eq(flowRunOutbox.runId, created.id));
+
+      expect(row?.lastError).not.toBeNull();
+      expect((row?.lastError ?? "").length).toBeGreaterThan(0);
+    });
+
+    /**
+     * Without a way back, a stuck row is stuck for good and the only remedy is hand-written SQL against production
+     * — so the relay would report "needs attention" while offering nothing to do about it.
+     */
+    test("a stuck row can be given another chance, keeping the reason it failed", async () => {
+      const created = await createFlowRunWithOutbox(context.db, runValues(`revive-${crypto.randomUUID()}`));
+
+      for (let pass = 0; pass < config.outbox.maxAttempts + 1; pass += 1) {
+        await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+      }
+
+      const [exhausted] = await context.db.select().from(flowRunOutbox).where(eq(flowRunOutbox.runId, created.id));
+
+      await markOutboxFailed(context.db, exhausted?.id ?? "", "Redis was unreachable");
+      expect(await countStuckOutboxRows(context.db, config.outbox.maxAttempts)).toBeGreaterThan(0);
+
+      const revived = await resetStuckOutboxRows(context.db, config.outbox.maxAttempts);
+
+      expect(revived).toBeGreaterThan(0);
+
+      const [row] = await context.db.select().from(flowRunOutbox).where(eq(flowRunOutbox.runId, created.id));
+
+      expect(row?.attempts).toBe(0);
+      // Kept: what failed last time is the most useful thing to know if it fails again.
+      expect(row?.lastError).toBe("Redis was unreachable");
+
+      // Claimable again, which is the whole point.
+      const reclaimed = await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+
+      expect(reclaimed.some((entry) => entry.runId === created.id)).toBe(true);
     });
   });
 });
