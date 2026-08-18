@@ -60,7 +60,7 @@ async function checkComposeFiles(): Promise<void> {
     SECRETS_KEY: Buffer.alloc(config.secrets.keyLengthBytes, "v").toString("base64"),
     AUTH_SECRET: "v".repeat(config.auth.secretMinLength),
     OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.invalid",
-    SERVICE_FQDN_WEB_8080: "https://web.invalid",
+    PUBLIC_WEB_URL: "https://web.invalid",
     SERVICE_PASSWORD_64_AUTH: "v".repeat(config.auth.secretMinLength),
     SERVICE_USER_POSTGRES: config.localDev.postgres.user,
     SERVICE_PASSWORD_POSTGRES: config.localDev.postgres.password,

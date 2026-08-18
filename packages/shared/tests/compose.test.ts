@@ -102,3 +102,27 @@ describe("docker-compose image tags", () => {
     // biome-ignore-end lint/suspicious/noTemplateCurlyInString: see above
   });
 });
+
+/**
+ * Coolify's magic variables are not ordinary environment variables. A `SERVICE_FQDN_<SERVICE>_<PORT>`
+ * key is *consumed* by its compose parser — it generates the domain, registers the proxy route and
+ * moves on without ever passing the variable to a container. Reading it back as `${SERVICE_FQDN_…}`
+ * therefore yields an empty string, which the api rejects during env validation: the deploy reports
+ * only "container api is unhealthy", several minutes and one restart loop later.
+ */
+describe("coolify magic variables", () => {
+  test("no SERVICE_FQDN_* variable is read as a value", () => {
+    const references = coolifyComposeText
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .filter((line) => /\$\{?SERVICE_FQDN_/.test(line));
+
+    expect(references).toEqual([]);
+  });
+
+  test("the web service declares its domain, and declares it as a path", () => {
+    // The value of the key is the path Coolify appends to the domain it generates. Anything that
+    // is not a path — a URL, or a reference to the variable itself — is appended verbatim.
+    expect(coolifyComposeText).toContain("SERVICE_FQDN_WEB_8080: /");
+  });
+});

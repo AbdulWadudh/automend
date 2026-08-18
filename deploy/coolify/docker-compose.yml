@@ -81,17 +81,22 @@ services:
       API_PORT: 3000
       DATABASE_URL: postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-automend}
       REDIS_URL: redis://:${SERVICE_PASSWORD_REDIS}@redis:6379/0
-      # The browser reaches the API through the web app's own origin, so this is the only origin
-      # that ever makes a cross-origin call.
-      WEB_ORIGIN: ${SERVICE_FQDN_WEB_8080}
+      # The public address of the web app, and the only origin that makes a cross-origin call —
+      # the browser reaches the API through the web app's own domain.
+      #
+      # Set by hand, to the same domain assigned to the `web` service below. Coolify consumes
+      # SERVICE_FQDN_WEB_8080 while it builds the proxy route and never passes it back to a
+      # container, so referencing it here resolves to an empty string, which the API rejects at
+      # startup — a crash loop that a deploy only reports as "container api is unhealthy".
+      WEB_ORIGIN: "${PUBLIC_WEB_URL:?set this to the web app's own address, e.g. https://automend.example.com}"
       # Signs session cookies and encrypts stored OAuth tokens. Coolify generates one on first
       # deploy and keeps it; rotating it signs every user out.
       AUTH_SECRET: ${SERVICE_PASSWORD_64_AUTH}
       # OAuth providers redirect the *browser* back, so this is the public web address — never the
       # API's in-network one.
-      AUTH_BASE_URL: ${SERVICE_FQDN_WEB_8080}
+      AUTH_BASE_URL: "${PUBLIC_WEB_URL:?set this to the web app's own address, e.g. https://automend.example.com}"
       # Optional. Both must be set for "Continue with Google" to appear; the redirect URI to
-      # register with Google is ${SERVICE_FQDN_WEB_8080}/api/v1/auth/callback/google.
+      # register with Google is ${PUBLIC_WEB_URL}/api/v1/auth/callback/google.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # Envelope-encrypts stored connector tokens. Set by hand rather than from a Coolify magic
@@ -102,7 +107,7 @@ services:
       SECRETS_KEY: "${SECRETS_KEY:?generate one with openssl rand -base64 32}"
       # Optional, and each pair is all-or-nothing. Connecting a service is a SEPARATE OAuth
       # registration from signing in with it: the redirect URI is
-      # ${SERVICE_FQDN_WEB_8080}/api/v1/auth/oauth2/callback/<provider>-connector
+      # ${PUBLIC_WEB_URL}/api/v1/auth/oauth2/callback/<provider>-connector
       SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
       SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
@@ -150,7 +155,11 @@ services:
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     environment:
-      SERVICE_FQDN_WEB_8080: ${SERVICE_FQDN_WEB_8080}
+      # Declares this stack's one public route: Coolify reads the key, generates a domain for the
+      # `web` service and proxies it to port 8080. The value is the *path* to serve from, not a
+      # URL, and the variable itself never reaches a container — everything that needs the public
+      # address reads PUBLIC_WEB_URL instead.
+      SERVICE_FQDN_WEB_8080: /
       NODE_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}
       WEB_PORT: 8080
