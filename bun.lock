@@ -124,6 +124,18 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/kits": {
+      "name": "@automend/kits",
+      "version": "0.1.0",
+      "dependencies": {
+        "@automend/kit-framework": "workspace:*",
+        "@automend/shared": "workspace:*",
+        "zod": "^4.1.13",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared": {
       "name": "@automend/shared",
       "version": "0.1.0",
@@ -150,6 +162,8 @@
     "@automend/db": ["@automend/db@workspace:packages/db"],
 
     "@automend/kit-framework": ["@automend/kit-framework@workspace:packages/kit-framework"],
+
+    "@automend/kits": ["@automend/kits@workspace:packages/kits"],
 
     "@automend/shared": ["@automend/shared@workspace:packages/shared"],
 

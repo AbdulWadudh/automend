@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { config } from "@automend/shared";
 import { buildResolvedInputSchema, buildStoredInputSchema } from "../src/input-schema";
 import { type InputPropertyMap, Property } from "../src/property";
 
@@ -115,5 +116,76 @@ describe("a dropdown declared with no options", () => {
     });
 
     expect(schema.safeParse({ broken: "anything" }).success).toBe(false);
+  });
+});
+
+describe("a bounded number", () => {
+  const bounded = {
+    waitMs: Property.number({ displayName: "Wait", required: true, minimum: 0, maximum: 1_000 }),
+  } satisfies InputPropertyMap;
+
+  /**
+   * Bounds are a resolved-space concern for the same reason types are: `{{delayMs}}` has no magnitude,
+   * so a stored value cannot be range-checked and must not be rejected for it.
+   */
+  test("a variable saves, because text has no magnitude to check", () => {
+    expect(buildStoredInputSchema(bounded).safeParse({ waitMs: "{{delayMs}}" }).success).toBe(true);
+  });
+
+  test("the range is enforced once the value is real", () => {
+    const resolvedBounded = buildResolvedInputSchema(bounded);
+
+    expect(resolvedBounded.safeParse({ waitMs: "500" }).success).toBe(true);
+    expect(resolvedBounded.safeParse({ waitMs: "-1" }).success).toBe(false);
+    expect(resolvedBounded.safeParse({ waitMs: "1001" }).success).toBe(false);
+  });
+});
+
+describe("a field that opted out of templating", () => {
+  const structural = {
+    path: Property.shortText({ displayName: "Path", required: true, templatable: false }),
+  } satisfies InputPropertyMap;
+
+  test("is still stored as its declared type", () => {
+    expect(buildStoredInputSchema(structural).safeParse({ path: "incoming" }).success).toBe(true);
+    expect(buildStoredInputSchema(structural).safeParse({ path: 42 }).success).toBe(false);
+  });
+});
+
+describe("how much text a field may hold", () => {
+  test("the per-type default bounds an author who declared nothing", () => {
+    const schema = buildStoredInputSchema({ subject: Property.shortText({ displayName: "Subject" }) });
+    const withinLimit = "x".repeat(config.kits.textMaxLength.short);
+
+    expect(schema.safeParse({ subject: withinLimit }).success).toBe(true);
+    expect(schema.safeParse({ subject: `${withinLimit}x` }).success).toBe(false);
+  });
+
+  test("a body gets the longer default, since it is a different shape of field", () => {
+    const schema = buildStoredInputSchema({ body: Property.longText({ displayName: "Body" }) });
+    const longer = "x".repeat(config.kits.textMaxLength.short + 1);
+
+    expect(schema.safeParse({ body: longer }).success).toBe(true);
+  });
+
+  test("a kit may lower the bound for a field that should be short", () => {
+    const schema = buildStoredInputSchema({
+      code: Property.shortText({ displayName: "Code", maxLength: 4 }),
+    });
+
+    expect(schema.safeParse({ code: "ABCD" }).success).toBe(true);
+    expect(schema.safeParse({ code: "ABCDE" }).success).toBe(false);
+  });
+
+  /**
+   * The mirror image of a number's bounds: length limits what an author can type, range limits what
+   * the data may be. Re-checking length after substitution would reject a legitimate large value.
+   */
+  test("a resolved variable is not re-checked against the author's field length", () => {
+    const props = { body: Property.longText({ displayName: "Body", required: true, maxLength: 10 }) };
+    const substituted = "x".repeat(500);
+
+    expect(buildStoredInputSchema(props).safeParse({ body: substituted }).success).toBe(false);
+    expect(buildResolvedInputSchema(props).safeParse({ body: substituted }).success).toBe(true);
   });
 });

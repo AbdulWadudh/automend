@@ -49,3 +49,34 @@ describe("which properties accept a variable", () => {
     expect(constructed.toSorted()).toEqual([...config.kits.propertyTypes].toSorted());
   });
 });
+
+/**
+ * Writing the `core` kit is what produced this: a webhook's path and a cron expression are structural
+ * fields read before a flow has any data, so a variable picker on them would advertise something that
+ * could never resolve.
+ */
+describe("opting a property out of variables", () => {
+  test("a text field can decline templating", () => {
+    expect(Property.shortText({ displayName: "Path", templatable: false }).templatable).toBe(false);
+  });
+
+  test("the type's default still applies when nothing is said", () => {
+    expect(Property.shortText({ displayName: "Subject" }).templatable).toBe(true);
+  });
+});
+
+describe("bounds on a number", () => {
+  test("are recorded for the resolved schema to enforce", () => {
+    const delay = Property.number({ displayName: "Wait", minimum: 0, maximum: 3_600_000 });
+
+    expect(delay.minimum).toBe(0);
+    expect(delay.maximum).toBe(3_600_000);
+  });
+
+  test("are absent unless declared, rather than defaulted to something arbitrary", () => {
+    const plain = Property.number({ displayName: "Copies" });
+
+    expect(plain.minimum).toBeUndefined();
+    expect(plain.maximum).toBeUndefined();
+  });
+});

@@ -10,18 +10,19 @@
  * schema builder and a control in the inspector. It is short deliberately.
  */
 
-import type { config } from "@automend/shared";
+import { config } from "@automend/shared";
 
 export type PropertyType = (typeof config.kits.propertyTypes)[number];
 
 /**
- * Whether `{{variable}}` substitution runs on a property's value, decided by type rather than by the
- * kit author.
+ * Whether `{{variable}}` substitution runs on a property's value, by type.
  *
  * A toggle has nowhere to type a variable into, and a dropdown's value has to stay one of its
  * options — both would need a different control before a template could reach them. Everything else
  * is text in the builder, including `number`: a field holding `{{orderCount}}` is a string at rest
  * and a number only once the flow has data.
+ *
+ * This is the default, not the rule. A property may opt out — see `templatable` on `PropertySpec`.
  */
 const TEMPLATABLE_BY_TYPE: Readonly<Record<PropertyType, boolean>> = {
   shortText: true,
@@ -32,6 +33,23 @@ const TEMPLATABLE_BY_TYPE: Readonly<Record<PropertyType, boolean>> = {
   staticDropdown: false,
 };
 
+/**
+ * How much text each kind of field may hold, when the kit does not say.
+ *
+ * The point is that *unbounded* is not what an author gets by forgetting: a flow definition is one
+ * `jsonb` document written whole, so one unbounded field is a way to produce a row nobody can load.
+ * A checkbox and a dropdown are not text at rest and so have no bound to apply.
+ */
+const MAX_LENGTH_BY_TYPE: Readonly<Record<PropertyType, number | undefined>> = {
+  shortText: config.kits.textMaxLength.short,
+  // A number's stored form is the text of a template, which is never long.
+  number: config.kits.textMaxLength.short,
+  longText: config.kits.textMaxLength.long,
+  json: config.kits.textMaxLength.long,
+  checkbox: undefined,
+  staticDropdown: undefined,
+};
+
 type PropertyShape<Type extends PropertyType, Required extends boolean, Value> = {
   readonly type: Type;
   readonly displayName: string;
@@ -40,11 +58,27 @@ type PropertyShape<Type extends PropertyType, Required extends boolean, Value> =
   readonly required: Required;
   readonly templatable: boolean;
   readonly defaultValue?: Value;
+  /**
+   * Bounds the text an author may store in this field. Undefined for the two types that are not text
+   * at rest.
+   *
+   * Deliberately *not* re-checked once a variable has resolved: a short template may legitimately
+   * substitute a large value, and truncating that would corrupt the data rather than protect anything.
+   * The mirror image of a number's `minimum`/`maximum`, which can only be checked after resolution.
+   */
+  readonly maxLength?: number;
 };
 
 export type ShortTextProperty<Required extends boolean = boolean> = PropertyShape<"shortText", Required, string>;
 export type LongTextProperty<Required extends boolean = boolean> = PropertyShape<"longText", Required, string>;
-export type NumberProperty<Required extends boolean = boolean> = PropertyShape<"number", Required, number>;
+export type NumberProperty<Required extends boolean = boolean> = PropertyShape<"number", Required, number> & {
+  /**
+   * Checked when the value is resolved, not when it is stored — a field holding `{{delayMs}}` is text
+   * and cannot be range-checked until the flow has data to substitute.
+   */
+  readonly minimum?: number;
+  readonly maximum?: number;
+};
 export type CheckboxProperty<Required extends boolean = boolean> = PropertyShape<"checkbox", Required, boolean>;
 /**
  * `never` for the default, so declaring one is a type error.
@@ -113,6 +147,16 @@ type PropertySpec<Value, Required extends boolean> = {
   description?: string;
   required?: Required;
   defaultValue?: Value;
+  /**
+   * Opts a property out of `{{variable}}` substitution against its type's default.
+   *
+   * For structural fields rather than data ones: a webhook's path is a route and a cron expression is
+   * a schedule, and both are read before a flow has any data to substitute — so offering a variable
+   * picker on them would advertise something that could never resolve.
+   */
+  templatable?: boolean;
+  /** Raises or lowers the per-type default. */
+  maxLength?: number;
 };
 
 function build<Type extends PropertyType, Required extends boolean, Value>(
@@ -126,7 +170,8 @@ function build<Type extends PropertyType, Required extends boolean, Value>(
     // `?? false` widens to `boolean`, which loses the literal the caller passed and with it the
     // `required extends true` test in `ResolvedInput`. The default is the same value either way.
     required: (spec.required ?? false) as Required,
-    templatable: TEMPLATABLE_BY_TYPE[type],
+    templatable: spec.templatable ?? TEMPLATABLE_BY_TYPE[type],
+    maxLength: spec.maxLength ?? MAX_LENGTH_BY_TYPE[type],
     defaultValue: spec.defaultValue,
   };
 }
@@ -137,28 +182,38 @@ function build<Type extends PropertyType, Required extends boolean, Value>(
  * An object of functions rather than a class, and each returns a plain object — a property is data the
  * framework reads, never something with behaviour of its own. The registry deep-freezes the finished
  * tree at start-up (see `freeze.ts`), so nothing here needs to defend itself.
+ *
+ * `Required` is a `const` type parameter on every one of them, and that is load-bearing rather than
+ * decorative. A kit declares its properties *inline* inside the `createAction` spec, which gives the
+ * object literal a contextual type of `InputPropertyMap` — and because that mentions
+ * `ShortTextProperty<boolean>`, the contextual type would otherwise pin `Required` to `boolean` before
+ * the argument is even looked at. `required: true` would then be forgotten, `ResolvedInput` would make
+ * every field `| undefined`, and each action would open with guards the resolved schema has already
+ * made impossible to fail. `const` makes the argument win.
  */
 export const Property = {
   /** A single line of text. */
-  shortText<Required extends boolean = false>(spec: PropertySpec<string, Required>): ShortTextProperty<Required> {
+  shortText<const Required extends boolean = false>(spec: PropertySpec<string, Required>): ShortTextProperty<Required> {
     return build("shortText", spec);
   },
 
   /** Several lines — an email body, a message, a note. */
-  longText<Required extends boolean = false>(spec: PropertySpec<string, Required>): LongTextProperty<Required> {
+  longText<const Required extends boolean = false>(spec: PropertySpec<string, Required>): LongTextProperty<Required> {
     return build("longText", spec);
   },
 
-  number<Required extends boolean = false>(spec: PropertySpec<number, Required>): NumberProperty<Required> {
-    return build("number", spec);
+  number<const Required extends boolean = false>(
+    spec: PropertySpec<number, Required> & { minimum?: number; maximum?: number },
+  ): NumberProperty<Required> {
+    return { ...build("number", spec), minimum: spec.minimum, maximum: spec.maximum };
   },
 
-  checkbox<Required extends boolean = false>(spec: PropertySpec<boolean, Required>): CheckboxProperty<Required> {
+  checkbox<const Required extends boolean = false>(spec: PropertySpec<boolean, Required>): CheckboxProperty<Required> {
     return build("checkbox", spec);
   },
 
   /** Free-form structured data. Validated as parseable JSON, not against a shape. */
-  json<Required extends boolean = false>(
+  json<const Required extends boolean = false>(
     spec: Omit<PropertySpec<never, Required>, "defaultValue">,
   ): JsonProperty<Required> {
     return build("json", spec);
@@ -170,7 +225,7 @@ export const Property = {
    * Choices that have to be fetched from the service — a Slack channel, a spreadsheet tab — are a
    * dynamic dropdown, which does not exist yet.
    */
-  staticDropdown<const Value extends string, Required extends boolean = false>(
+  staticDropdown<const Value extends string, const Required extends boolean = false>(
     spec: PropertySpec<Value, Required> & { options: readonly DropdownOption<Value>[] },
   ): StaticDropdownProperty<Value, Required> {
     return {

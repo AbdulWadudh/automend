@@ -59,20 +59,36 @@ const jsonTextSchema = z
   // Safe to parse here rather than in a try: the refinement above has already run.
   .transform((value): unknown => JSON.parse(value));
 
+/** Undefined for the types that are not text at rest, which is why this is not unconditional. */
+function boundedText(maxLength: number | undefined): z.ZodString {
+  const text = z.string();
+
+  return maxLength === undefined ? text : text.max(maxLength);
+}
+
 function storedPropertySchema(property: InputProperty): z.ZodType {
   // A templatable field is text at rest whatever it will become, so its stored type is the same for
-  // every declared type and there is nothing further to check.
+  // every declared type and the only thing left to check is how much of it there is.
   if (property.templatable) {
-    return z.string();
+    return boundedText(property.maxLength);
   }
 
+  // Exhaustive rather than defaulted: a `default` branch here silently accepted anything the moment
+  // `templatable` became something a property could decline, which let a non-templatable text field
+  // store a number.
   switch (property.type) {
+    case "shortText":
+    case "longText":
+    // A JSON field is a text box either way, so its stored form is text even when it declines
+    // templating; parsing happens on resolution.
+    case "json":
+      return boundedText(property.maxLength);
+    case "number":
+      return z.number().finite();
     case "checkbox":
       return z.boolean();
     case "staticDropdown":
       return dropdownSchema(property.options);
-    default:
-      return z.unknown();
   }
 }
 
@@ -82,9 +98,21 @@ function resolvedPropertySchema(property: InputProperty): z.ZodType {
     case "longText":
       return z.string();
     // Coerced rather than checked: the value reaching here is the text a template resolved to, so
-    // `"42"` is the normal case and `42` only occurs when a default supplied it.
-    case "number":
-      return z.coerce.number().finite();
+    // `"42"` is the normal case and `42` only occurs when a default supplied it. Bounds are applied
+    // here rather than in the stored schema for the same reason — `{{delayMs}}` has no magnitude.
+    case "number": {
+      let schema = z.coerce.number().finite();
+
+      if (property.minimum !== undefined) {
+        schema = schema.min(property.minimum);
+      }
+
+      if (property.maximum !== undefined) {
+        schema = schema.max(property.maximum);
+      }
+
+      return schema;
+    }
     case "checkbox":
       return z.boolean();
     case "staticDropdown":

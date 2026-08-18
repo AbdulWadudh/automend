@@ -139,6 +139,19 @@ const APP_FLOWS_ROUTE = `${APP_ROUTE}/flows` as const;
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 60 * SECONDS_PER_MINUTE;
 const SECONDS_PER_DAY = 24 * SECONDS_PER_HOUR;
+const MS_PER_SECOND = 1_000;
+
+/**
+ * Wall-clock caps on execution, and the only place they are chosen.
+ *
+ * A step cannot outlast the run it belongs to, and a `delay` step — which genuinely blocks, because
+ * suspending and resuming a run does not exist yet — cannot outlast its step. Everything downstream
+ * is derived from these two so the three can never contradict each other.
+ */
+const ENGINE_STEP_TIMEOUT_MS = 5 * SECONDS_PER_MINUTE * MS_PER_SECOND;
+const ENGINE_RUN_TIMEOUT_MS = 15 * SECONDS_PER_MINUTE * MS_PER_SECOND;
+/** Room for a delay step's own overhead, so the wait ends before the timeout fires rather than with it. */
+const DELAY_TIMEOUT_HEADROOM_MS = 10 * MS_PER_SECOND;
 
 export const config = {
   appVersion: APP_VERSION,
@@ -466,10 +479,17 @@ export const config = {
     httpMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     defaultHttpMethod: "GET",
     delay: {
-      defaultMs: 1_000,
+      defaultMs: MS_PER_SECOND,
       minMs: 0,
-      /** An hour. Anything longer belongs in a schedule trigger, not a blocking step. */
-      maxMs: SECONDS_PER_HOUR * 1_000,
+      /**
+       * Derived from the step timeout rather than chosen, because a delay genuinely blocks its step —
+       * suspending a run and resuming it later does not exist yet, so a wait occupies a worker slot
+       * for its whole duration and the engine would kill anything longer mid-wait.
+       *
+       * That makes this a short wait for letting an upstream settle or pacing a rate limit, not a
+       * scheduling tool. Anything longer belongs in a schedule trigger.
+       */
+      maxMs: ENGINE_STEP_TIMEOUT_MS - DELAY_TIMEOUT_HEADROOM_MS,
     },
     /** Inbound webhook deliveries — what a `webhook` trigger actually receives. */
     webhook: {
@@ -560,6 +580,70 @@ export const config = {
     maxPollItems: 100,
     /** What a trigger returns when the builder tests it — enough to populate the variable picker. */
     testPollItems: 5,
+    /**
+     * How much text a step's field may hold, by shape of field.
+     *
+     * These are defaults a property can raise or lower, and they exist so that *unbounded* is never
+     * what a kit author gets by forgetting. A flow definition is one `jsonb` document written whole,
+     * so a single unbounded field is a way to make a row nobody can load.
+     *
+     * They bound what an author can type, not what a variable resolves to — a short template may
+     * legitimately substitute a large value, and truncating that would corrupt the data rather than
+     * protect anything.
+     */
+    textMaxLength: {
+      /** A line: a recipient, a URL, a subject. */
+      short: 2_000,
+      /** A body, a note, a JSON document. */
+      long: 50_000,
+    },
+  },
+
+  /**
+   * The execution engine — a subprocess per run, spawned by the worker.
+   *
+   * The limits here are the ones the platform can actually enforce. Bun's spawn options provide a
+   * wall-clock timeout, an output cap and a kill signal, and nothing for memory, CPU, filesystem or
+   * network; a memory ceiling is a container concern and is documented as such rather than pretended
+   * to here.
+   */
+  engine: {
+    /** One step. Also what bounds a `delay`, which is why `flows.delay.maxMs` is derived from it. */
+    stepTimeoutMs: ENGINE_STEP_TIMEOUT_MS,
+    /** The whole run, however many steps it has. Enforced by the parent, which kills the subprocess. */
+    runTimeoutMs: ENGINE_RUN_TIMEOUT_MS,
+    /**
+     * What the subprocess may write to stdout and stderr before it is killed.
+     *
+     * A kit logging in a loop must not be able to exhaust the worker's memory through the pipe it
+     * reports on.
+     */
+    maxOutputBytes: 8 * 1_024 * 1_024,
+    /** How long the parent waits for a killed subprocess to exit before giving up on it. */
+    shutdownGraceMs: 5 * MS_PER_SECOND,
+
+    /** The guarded HTTP client every kit reaches the network through. */
+    http: {
+      requestTimeoutMs: 30 * MS_PER_SECOND,
+      /**
+       * Redirects are followed by us rather than by `fetch`, so each hop can be re-checked against the
+       * address rules below — a permitted URL redirecting to `169.254.169.254` is the whole SSRF
+       * problem in one request.
+       */
+      maxRedirects: 3,
+      /** Bytes of response body read before the request is abandoned. */
+      maxResponseBytes: 5 * 1_024 * 1_024,
+      /**
+       * Hostnames and address ranges a flow may never reach: loopback, link-local (which is where
+       * every cloud provider's credential endpoint lives) and the private ranges, since a self-hosted
+       * deployment's own database and Redis sit on them.
+       *
+       * The default is the safe one. A deployment that genuinely automates against a service on its
+       * own network needs an override, which arrives with the guard that reads this.
+       */
+      blockedHostnames: ["localhost", "metadata.google.internal"],
+      allowPrivateNetworkByDefault: false,
+    },
   },
 
   database: {

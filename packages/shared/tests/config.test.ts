@@ -248,3 +248,27 @@ describe("kit configuration", () => {
     expect(config.kits.testPollItems).toBeLessThan(config.kits.maxPollItems);
   });
 });
+
+describe("engine limits", () => {
+  test("a step cannot outlast the run it belongs to", () => {
+    expect(config.engine.stepTimeoutMs).toBeLessThanOrEqual(config.engine.runTimeoutMs);
+  });
+
+  /**
+   * A delay blocks its step, so a wait longer than the step timeout would be killed mid-wait. Derived
+   * from the timeout in `config.ts` rather than written down twice, which is what this checks.
+   */
+  test("the longest allowed wait finishes before its step is killed", () => {
+    expect(config.flows.delay.maxMs).toBeLessThan(config.engine.stepTimeoutMs);
+    expect(config.flows.delay.defaultMs).toBeLessThanOrEqual(config.flows.delay.maxMs);
+    expect(config.flows.delay.minMs).toBeLessThan(config.flows.delay.maxMs);
+  });
+
+  test("an HTTP request cannot outlast the step making it", () => {
+    expect(config.engine.http.requestTimeoutMs).toBeLessThan(config.engine.stepTimeoutMs);
+  });
+
+  test("a response body cannot exceed what the subprocess may report", () => {
+    expect(config.engine.http.maxResponseBytes).toBeLessThanOrEqual(config.engine.maxOutputBytes);
+  });
+});
