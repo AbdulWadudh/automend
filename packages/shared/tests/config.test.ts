@@ -217,3 +217,34 @@ describe("logging configuration", () => {
     expect(config.logging.redactedPaths).toContain("REDIS_URL");
   });
 });
+
+describe("kit configuration", () => {
+  test("every schedulable strategy is a strategy that exists", () => {
+    const strategies: readonly string[] = config.kits.triggerStrategies;
+
+    for (const strategy of config.kits.schedulableTriggerStrategies) {
+      expect(strategies).toContain(strategy);
+    }
+  });
+
+  /**
+   * Not every strategy is schedulable yet — `polling` and `cron` are defined but nothing fires them —
+   * so this asserts the list is a real subset rather than that it is complete.
+   */
+  test("there is at least one way to start a flow", () => {
+    expect(config.kits.schedulableTriggerStrategies.length).toBeGreaterThan(0);
+    expect(config.kits.schedulableTriggerStrategies.length).toBeLessThanOrEqual(config.kits.triggerStrategies.length);
+  });
+
+  test("no vocabulary list repeats an entry", () => {
+    const { propertyTypes, triggerStrategies, dedupeStrategies } = config.kits;
+
+    for (const list of [propertyTypes, triggerStrategies, dedupeStrategies]) {
+      expect(new Set(list).size).toBe(list.length);
+    }
+  });
+
+  test("a trigger test shows fewer items than a real poll may return", () => {
+    expect(config.kits.testPollItems).toBeLessThan(config.kits.maxPollItems);
+  });
+});

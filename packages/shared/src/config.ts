@@ -528,6 +528,40 @@ export const config = {
     },
   },
 
+  /**
+   * Kits — one per third-party service, each bundling the actions a flow can take and the triggers
+   * that can start one. A kit is the unit of "add a service", so everything here describes the
+   * vocabulary a kit author writes against rather than any one service.
+   *
+   * A kit names the *connector* it needs (`config.connectors.providers`); a workspace's authorised
+   * instance of that connector is a connection. The kit never holds a credential itself.
+   */
+  kits: {
+    /**
+     * The input types a kit may declare. Each one needs a branch in the framework's schema builder
+     * and a control in the builder's inspector, so the list is short on purpose — a kit that wants
+     * a richer field composes these rather than adding a seventh.
+     */
+    propertyTypes: ["shortText", "longText", "number", "checkbox", "staticDropdown", "json"],
+    /** How a trigger learns that something happened. */
+    triggerStrategies: ["manual", "webhook", "polling", "cron"],
+    /**
+     * The strategies this deployment can actually fire. `polling` and `cron` are absent until the
+     * scheduler exists: the catalogue reports the rest unavailable so the builder can refuse them
+     * with a reason, rather than accepting a flow that would silently never run.
+     */
+    schedulableTriggerStrategies: ["manual", "webhook"],
+    /**
+     * How a polling trigger recognises what it has already seen. `timestamp` suits a service that
+     * dates its records; `lastItem` suits one that only guarantees an order.
+     */
+    dedupeStrategies: ["timestamp", "lastItem"],
+    /** A single poll cannot hand the engine an unbounded backlog. */
+    maxPollItems: 100,
+    /** What a trigger returns when the builder tests it — enough to populate the variable picker. */
+    testPollItems: 5,
+  },
+
   database: {
     /** Kept small: many API and worker replicas share one Postgres. */
     apiMaxConnections: 10,
