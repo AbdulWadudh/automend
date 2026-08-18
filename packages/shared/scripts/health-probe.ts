@@ -10,7 +10,13 @@
 
 import { config } from "../src/config";
 
-const probes = {
+type Probe = {
+  /** The variable a deployment moves the port with. */
+  portVariable: string;
+  defaultPort: number;
+};
+
+const probes: Record<string, Probe> = {
   [config.services.api.name]: {
     portVariable: "API_PORT",
     defaultPort: config.services.api.defaultPort,
@@ -19,7 +25,7 @@ const probes = {
     portVariable: "WORKER_HEALTH_PORT",
     defaultPort: config.services.worker.defaultHealthPort,
   },
-} as const;
+};
 
 const serviceName = process.argv[2] ?? "";
 const probe = probes[serviceName];
