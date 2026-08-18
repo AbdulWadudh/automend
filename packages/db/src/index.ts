@@ -18,7 +18,7 @@ export {
   updateConnectionSecretForTenant,
   upsertOAuthConnection,
 } from "./connections";
-export type { InsertFlowValues, UpdateFlowValues } from "./flows";
+export type { InsertFlowValues, ListFlowsOptions, UpdateFlowValues } from "./flows";
 export {
   deleteFlowForTenant,
   findFlowForTenant,
@@ -49,6 +49,20 @@ export {
   pruneOutboxPublishedBefore,
   resetStuckOutboxRows,
 } from "./outbox";
+export type {
+  ListRunsFilters,
+  RetriggerRunValues,
+  RunListRow,
+  RunRetryColumns,
+  RunStatusGroupRow,
+  RunWithFlow,
+} from "./run-activity";
+export {
+  findRunWithFlowForTenant,
+  listRunsForTenant,
+  retriggerRun,
+  summariseRunsForTenant,
+} from "./run-activity";
 export type { CreatedRun, CreateRunValues, FinishRunValues, RunSummary } from "./runs";
 export {
   abandonPendingRun,

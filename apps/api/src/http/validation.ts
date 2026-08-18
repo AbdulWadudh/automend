@@ -26,6 +26,16 @@ export async function parseJsonBody<Schema extends z.ZodType>(c: Context, schema
   return result.data;
 }
 
+export function parseQuery<Schema extends z.ZodType>(c: Context, schema: Schema): z.infer<Schema> {
+  const result = schema.safeParse(c.req.query());
+
+  if (!result.success) {
+    throw requestValidationError(describeIssues(result.error));
+  }
+
+  return result.data;
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**

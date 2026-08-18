@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { config } from "../src/config";
 import {
+  buildRetriggerIdempotencyKey,
   buildRunIdempotencyKey,
   canTransitionRun,
   canTransitionStep,
+  formatDurationMs,
   isTerminalRunStatus,
   isTerminalStepStatus,
   RUN_STATUSES,
   type RunStatus,
+  runDurationMs,
   STEP_STATUSES,
   type StepStatus,
 } from "../src/runs";
@@ -180,5 +183,61 @@ describe("the status vocabularies", () => {
 
     expect(nonTerminal.length).toBeGreaterThan(0);
     expect(nonTerminalSteps.length).toBeGreaterThan(0);
+  });
+});
+
+describe("how long a run took", () => {
+  const startedAt = "2026-08-19T10:00:00.000Z";
+
+  test("a queued run has no duration at all", () => {
+    expect(runDurationMs({ startedAt: null, finishedAt: null })).toBeNull();
+  });
+
+  test("a finished run is measured between its own two timestamps", () => {
+    expect(runDurationMs({ startedAt, finishedAt: "2026-08-19T10:00:01.500Z" })).toBe(1_500);
+  });
+
+  test("a running one is measured against now, so the page shows it climbing", () => {
+    const nowMs = Date.parse(startedAt) + 4_000;
+
+    expect(runDurationMs({ startedAt, finishedAt: null }, nowMs)).toBe(4_000);
+  });
+
+  test("a clock that went backwards reads as zero rather than as a negative duration", () => {
+    expect(runDurationMs({ startedAt, finishedAt: "2026-08-19T09:59:59.000Z" })).toBe(0);
+  });
+});
+
+describe("writing a duration down", () => {
+  test("sub-second work keeps its milliseconds", () => {
+    expect(formatDurationMs(350)).toBe("350ms");
+  });
+
+  test("seconds are precise enough to compare two fast steps", () => {
+    expect(formatDurationMs(1_500)).toBe("1.50s");
+    expect(formatDurationMs(42_300)).toBe("42.3s");
+  });
+
+  test("past a minute the milliseconds stop mattering", () => {
+    expect(formatDurationMs(90_000)).toBe("1m 30s");
+    expect(formatDurationMs(3 * 60 * 60 * 1_000 + 25 * 60 * 1_000)).toBe("3h 25m");
+  });
+});
+
+describe("retriggering a run", () => {
+  const runId = "9a1f8c2e-1111-4111-8111-111111111111";
+
+  test("one gesture is one key, so a double-click resolves to the run it already started", () => {
+    expect(buildRetriggerIdempotencyKey(runId, "press-1")).toBe(buildRetriggerIdempotencyKey(runId, "press-1"));
+  });
+
+  test("a later press carries a new token and is a genuinely new run", () => {
+    expect(buildRetriggerIdempotencyKey(runId, "press-2")).not.toBe(buildRetriggerIdempotencyKey(runId, "press-1"));
+  });
+
+  test("two runs cannot collide even if their tokens match", () => {
+    const other = "9a1f8c2e-2222-4222-8222-222222222222";
+
+    expect(buildRetriggerIdempotencyKey(runId, "press-1")).not.toBe(buildRetriggerIdempotencyKey(other, "press-1"));
   });
 });

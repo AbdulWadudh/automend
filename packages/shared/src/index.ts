@@ -15,5 +15,6 @@ export * from "./health";
 export * from "./operations";
 export * from "./queue";
 export * from "./rich-text";
+export * from "./run-activity";
 export * from "./runs";
 export * from "./templates";

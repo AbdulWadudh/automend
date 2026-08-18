@@ -14,7 +14,7 @@
 
 import { upgradeFlowDefinition } from "@automend/kits";
 import type { FlowDefinition } from "@automend/shared";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike } from "drizzle-orm";
 import type { Database } from "./client";
 import { type FlowRow, flows } from "./schema";
 
@@ -42,8 +42,35 @@ export type UpdateFlowValues = {
   definition?: FlowDefinition;
 };
 
-export async function listFlowsForTenant(db: Database, tenantId: string): Promise<FlowRow[]> {
-  const rows = await db.select().from(flows).where(eq(flows.tenantId, tenantId)).orderBy(desc(flows.updatedAt));
+export type ListFlowsOptions = {
+  /** Matched against the name, case-insensitively, anywhere in it. */
+  search?: string;
+  limit?: number;
+};
+
+/** `%` and `_` are wildcards to `ilike`, so a name containing either must not silently match more. */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
+export async function listFlowsForTenant(
+  db: Database,
+  tenantId: string,
+  options: ListFlowsOptions = {},
+): Promise<FlowRow[]> {
+  const conditions = [eq(flows.tenantId, tenantId)];
+
+  if (options.search) {
+    conditions.push(ilike(flows.name, `%${escapeLikePattern(options.search)}%`));
+  }
+
+  const query = db
+    .select()
+    .from(flows)
+    .where(and(...conditions))
+    .orderBy(desc(flows.updatedAt));
+
+  const rows = await (options.limit === undefined ? query : query.limit(options.limit));
 
   return rows.map(withCurrentDefinition);
 }

@@ -69,6 +69,7 @@ const AUTH_PATH = "/auth";
 const APP_ROUTE = "/app";
 /** The router's placeholder syntax, so a link and the file-based route agree on the parameter. */
 const FLOW_ID_PARAM = "flowId";
+const RUN_ID_PARAM = "runId";
 
 const PRODUCT_NAME = "Automend";
 const PUBLIC_DOMAIN = "automend.k79.quest";
@@ -180,6 +181,7 @@ function emailAddress(mailbox: string, domain: string): string {
 const API_BASE_PATH = `${API_PREFIX}/${API_VERSION}` as const;
 const AUTH_BASE_PATH = `${API_BASE_PATH}${AUTH_PATH}` as const;
 const APP_FLOWS_ROUTE = `${APP_ROUTE}/flows` as const;
+const APP_RUNS_ROUTE = `${APP_ROUTE}/runs` as const;
 
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 60 * SECONDS_PER_MINUTE;
@@ -295,6 +297,8 @@ export const config = {
       /** The same report, reachable by the browser through the web app's proxy. */
       apiHealth: `${API_BASE_PATH}${HEALTH_PATH}`,
       flows: `${API_BASE_PATH}/flows`,
+      /** Runs across every flow. A sibling of `flows` because the dashboard does not read one flow. */
+      runs: `${API_BASE_PATH}/runs`,
       connections: `${API_BASE_PATH}/connections`,
       /**
        * The kit catalogue the builder renders from.
@@ -565,6 +569,15 @@ export const config = {
     },
     httpMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     defaultHttpMethod: "GET",
+
+    /** The flow picker, which asks the API as somebody types rather than filtering a list it holds. */
+    picker: {
+      resultLimit: 20,
+      maxResultLimit: 100,
+      /** Long enough that a fast typist sends one request rather than one per keystroke. */
+      debounceMs: 200,
+      maxQueryLength: 100,
+    },
     delay: {
       defaultMs: MS_PER_SECOND,
       minMs: 0,
@@ -807,6 +820,19 @@ export const config = {
 
     /** How many runs the builder lists for a flow. Enough to find the one you just started. */
     recentRuns: 50,
+
+    /** The run dashboard. */
+    dashboard: {
+      pageSize: 25,
+      maxPageSize: 100,
+      /** Only polled while a run on screen is unfinished; terminal runs never change again. */
+      liveRefetchIntervalMs: 3 * MS_PER_SECOND,
+      defaultStatsWindowHours: 24,
+      maxStatsWindowHours: 24 * 30,
+      statsWindowChoices: [1, 24, 24 * 7, 24 * 30],
+      /** A step may return a megabyte of JSON; pasting all of it into the DOM makes the page unusable. */
+      payloadPreviewChars: 20_000,
+    },
   },
 
   database: {
@@ -1119,11 +1145,14 @@ export const config = {
       app: APP_ROUTE,
       flows: APP_FLOWS_ROUTE,
       flowDetail: `${APP_FLOWS_ROUTE}/$${FLOW_ID_PARAM}`,
+      runs: APP_RUNS_ROUTE,
+      runDetail: `${APP_RUNS_ROUTE}/$${RUN_ID_PARAM}`,
       connections: `${APP_ROUTE}/connections`,
       operations: `${APP_ROUTE}/operations`,
     },
-    /** The parameter name in `flowDetail`, so `useParams()` and the link cannot disagree. */
+    /** The parameter names in `flowDetail` and `runDetail`, so `useParams()` and the link cannot disagree. */
     flowIdParam: FLOW_ID_PARAM,
+    runIdParam: RUN_ID_PARAM,
     /**
      * Where a guarded route sends an unauthenticated visitor, and the search parameter it uses to
      * remember where they were going.

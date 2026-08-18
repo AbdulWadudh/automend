@@ -22,6 +22,8 @@ import { Route as AppConnectionsRouteImport } from './routes/app/connections'
 import { Route as AppOperationsRouteImport } from './routes/app/operations'
 import { Route as AppFlowsIndexRouteImport } from './routes/app/flows/index'
 import { Route as AppFlowsFlowIdRouteImport } from './routes/app/flows/$flowId'
+import { Route as AppRunsIndexRouteImport } from './routes/app/runs/index'
+import { Route as AppRunsRunIdRouteImport } from './routes/app/runs/$runId'
 
 const MarketingRoute = MarketingRouteImport.update({
   id: '/_marketing',
@@ -87,6 +89,16 @@ const AppFlowsFlowIdRoute = AppFlowsFlowIdRouteImport.update({
   path: '/flows/$flowId',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRunsIndexRoute = AppRunsIndexRouteImport.update({
+  id: '/runs/',
+  path: '/runs/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRunsRunIdRoute = AppRunsRunIdRouteImport.update({
+  id: '/runs/$runId',
+  path: '/runs/$runId',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof MarketingIndexRoute
@@ -100,7 +112,9 @@ export interface FileRoutesByFullPath {
   '/app/operations': typeof AppOperationsRoute
   '/app/': typeof AppIndexRoute
   '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
+  '/app/runs/$runId': typeof AppRunsRunIdRoute
   '/app/flows/': typeof AppFlowsIndexRoute
+  '/app/runs/': typeof AppRunsIndexRoute
 }
 export interface FileRoutesByTo {
   '/sign-in': typeof SignInRoute
@@ -113,7 +127,9 @@ export interface FileRoutesByTo {
   '/': typeof MarketingIndexRoute
   '/app': typeof AppIndexRoute
   '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
+  '/app/runs/$runId': typeof AppRunsRunIdRoute
   '/app/flows': typeof AppFlowsIndexRoute
+  '/app/runs': typeof AppRunsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -129,7 +145,9 @@ export interface FileRoutesById {
   '/_marketing/': typeof MarketingIndexRoute
   '/app/': typeof AppIndexRoute
   '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
+  '/app/runs/$runId': typeof AppRunsRunIdRoute
   '/app/flows/': typeof AppFlowsIndexRoute
+  '/app/runs/': typeof AppRunsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -145,7 +163,9 @@ export interface FileRouteTypes {
     | '/app/operations'
     | '/app/'
     | '/app/flows/$flowId'
+    | '/app/runs/$runId'
     | '/app/flows/'
+    | '/app/runs/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/sign-in'
@@ -158,7 +178,9 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/app/flows/$flowId'
+    | '/app/runs/$runId'
     | '/app/flows'
+    | '/app/runs'
   id:
     | '__root__'
     | '/_marketing'
@@ -173,7 +195,9 @@ export interface FileRouteTypes {
     | '/_marketing/'
     | '/app/'
     | '/app/flows/$flowId'
+    | '/app/runs/$runId'
     | '/app/flows/'
+    | '/app/runs/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -276,6 +300,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppFlowsFlowIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/runs/': {
+      id: '/app/runs/'
+      path: '/runs'
+      fullPath: '/app/runs/'
+      preLoaderRoute: typeof AppRunsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/runs/$runId': {
+      id: '/app/runs/$runId'
+      path: '/runs/$runId'
+      fullPath: '/app/runs/$runId'
+      preLoaderRoute: typeof AppRunsRunIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -302,7 +340,9 @@ interface AppRouteChildren {
   AppOperationsRoute: typeof AppOperationsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppFlowsFlowIdRoute: typeof AppFlowsFlowIdRoute
+  AppRunsRunIdRoute: typeof AppRunsRunIdRoute
   AppFlowsIndexRoute: typeof AppFlowsIndexRoute
+  AppRunsIndexRoute: typeof AppRunsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -310,7 +350,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppOperationsRoute: AppOperationsRoute,
   AppIndexRoute: AppIndexRoute,
   AppFlowsFlowIdRoute: AppFlowsFlowIdRoute,
+  AppRunsRunIdRoute: AppRunsRunIdRoute,
   AppFlowsIndexRoute: AppFlowsIndexRoute,
+  AppRunsIndexRoute: AppRunsIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

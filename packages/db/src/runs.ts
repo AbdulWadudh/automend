@@ -18,6 +18,8 @@ export type CreateRunValues = {
   idempotencyKey: string;
   definitionSnapshot: FlowDefinition;
   triggerPayload: unknown;
+  /** Set only by `retriggerRun`. */
+  retryOfRunId?: string | null;
 };
 
 export type CreatedRun = {
@@ -58,6 +60,7 @@ export async function createFlowRunWithOutbox(db: Database, values: CreateRunVal
         idempotencyKey: values.idempotencyKey,
         definitionSnapshot: values.definitionSnapshot,
         triggerPayload: values.triggerPayload,
+        retryOfRunId: values.retryOfRunId ?? null,
       })
       .onConflictDoUpdate({
         target: [flowRuns.flowId, flowRuns.idempotencyKey],
@@ -167,13 +170,14 @@ export type RunSummary = {
   idempotencyKey: string;
   triggerPayload: unknown;
   error: RunError | null;
+  retryOfRunId: string | null;
   startedAt: Date | null;
   finishedAt: Date | null;
   createdAt: Date;
 };
 
 /** The definition snapshot is deliberately absent: it is large, and a listing never needs it. */
-const runSummaryColumns = {
+export const runSummaryColumns = {
   id: flowRuns.id,
   tenantId: flowRuns.tenantId,
   flowId: flowRuns.flowId,
@@ -182,6 +186,7 @@ const runSummaryColumns = {
   idempotencyKey: flowRuns.idempotencyKey,
   triggerPayload: flowRuns.triggerPayload,
   error: flowRuns.error,
+  retryOfRunId: flowRuns.retryOfRunId,
   startedAt: flowRuns.startedAt,
   finishedAt: flowRuns.finishedAt,
   createdAt: flowRuns.createdAt,

@@ -13,6 +13,7 @@
 import type { FlowDefinition, RunError } from "@automend/shared";
 import type { EncryptedSecret } from "@automend/shared/crypto";
 import { sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   boolean,
   index,
@@ -194,6 +195,12 @@ export const flowRuns = pgTable(
     /** What the trigger produced. The first step's variables resolve against this. */
     triggerPayload: jsonb("trigger_payload"),
     error: jsonb("error").$type<RunError>(),
+    /**
+     * The run this one repeats. A retrigger is a new run rather than a reopened one, because the failed
+     * run's journal is the evidence of what broke. `set null` on delete, not `cascade`: the lineage is
+     * worth less than the retry that succeeded.
+     */
+    retryOfRunId: uuid("retry_of_run_id").references((): AnyPgColumn => flowRuns.id, { onDelete: "set null" }),
     /** Null until the worker collects the job; a pending run has been created but not started. */
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -202,8 +209,11 @@ export const flowRuns = pgTable(
   (table) => [
     // What the builder asks for: this flow's runs, newest first.
     index("flow_runs_flow_created_idx").on(table.flowId, table.createdAt.desc()),
+    // What the dashboard asks for: this workspace's runs across every flow, newest first.
+    index("flow_runs_tenant_created_idx").on(table.tenantId, table.createdAt.desc()),
     index("flow_runs_tenant_id_idx").on(table.tenantId),
     uniqueIndex("flow_runs_flow_idempotency_idx").on(table.flowId, table.idempotencyKey),
+    index("flow_runs_retry_of_idx").on(table.retryOfRunId).where(sql`${table.retryOfRunId} is not null`),
   ],
 );
 

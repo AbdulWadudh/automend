@@ -7,12 +7,12 @@
  * this" confirms that it exists.
  */
 
-import type { FlowRow, RunSummary, StepRunSummary } from "@automend/db";
+import type { FlowRow } from "@automend/db";
 import {
   createFlowRunWithOutbox,
   deleteFlowForTenant,
   findFlowForTenant,
-  findRunForTenant,
+  findRunWithFlowForTenant,
   insertFlow,
   listDeliveriesForFlow,
   listFlowsForTenant,
@@ -21,29 +21,26 @@ import {
   registerFlowTrigger,
   updateFlowForTenant,
 } from "@automend/db";
-import { describeDefinitionIssues, findTrigger, validateDefinitionAgainstRegistry } from "@automend/kits";
+import { findTrigger } from "@automend/kits";
 import {
   buildRunIdempotencyKey,
   config,
   createDefaultFlowDefinition,
   createFlowRequestSchema,
   type Flow,
-  type FlowDefinition,
-  type FlowRun,
-  type FlowStepRun,
-  flowValidationError,
+  flowListQuerySchema,
   notFoundError,
-  type RunStatus,
   readTriggerText,
-  type StepStatus,
   startFlowRunRequestSchema,
   updateFlowRequestSchema,
 } from "@automend/shared";
 import { Hono } from "hono";
 import type { ApiDependencies } from "../dependencies";
+import { assertDefinitionIsExecutable } from "../http/definition-validation";
 import { respondWithData } from "../http/envelope";
+import { toRunDetailResponse, toRunResponse } from "../http/run-responses";
 import { createRequireSession, getRequestContext, type SessionEnv } from "../http/session";
-import { parseJsonBody, parseUuidParam } from "../http/validation";
+import { parseJsonBody, parseQuery, parseUuidParam } from "../http/validation";
 
 /** Local to this router: nothing outside it addresses the parameter by name. */
 const FLOW_ID_PARAM = "flowId";
@@ -64,56 +61,6 @@ function toFlowResponse(row: FlowRow): Flow {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
-}
-
-function toRunResponse(row: RunSummary): FlowRun {
-  return {
-    id: row.id,
-    tenantId: row.tenantId,
-    flowId: row.flowId,
-    status: row.status as RunStatus,
-    source: row.source as FlowRun["source"],
-    idempotencyKey: row.idempotencyKey,
-    triggerPayload: row.triggerPayload,
-    error: row.error,
-    startedAt: row.startedAt?.toISOString() ?? null,
-    finishedAt: row.finishedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-function toStepRunResponse(row: StepRunSummary): FlowStepRun {
-  return {
-    id: row.id,
-    runId: row.runId,
-    stepId: row.stepId,
-    stepName: row.stepName,
-    kitId: row.kitId,
-    actionName: row.actionName,
-    status: row.status as StepStatus,
-    attempt: row.attempt,
-    input: row.input,
-    output: row.output,
-    error: row.error,
-    startedAt: row.startedAt?.toISOString() ?? null,
-    finishedAt: row.finishedAt?.toISOString() ?? null,
-  };
-}
-
-/**
- * The half of validation the shared schema cannot do.
- *
- * `flowDefinitionSchema` has already checked the structure by the time a body is parsed; this asks the
- * registry whether the kits and actions it names exist and whether the values saved against them suit their
- * fields. Every issue is reported at once, because an author who renamed a kit should see every step that
- * needs attention rather than discovering them one save at a time.
- */
-function assertDefinitionIsExecutable(definition: FlowDefinition): void {
-  const issues = validateDefinitionAgainstRegistry(definition);
-
-  if (issues.length > 0) {
-    throw flowValidationError(describeDefinitionIssues(issues));
-  }
 }
 
 /**
@@ -155,7 +102,8 @@ export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
 
   routes.get("/", async (c) => {
     const { tenantId } = getRequestContext(c);
-    const rows = await listFlowsForTenant(deps.db, tenantId);
+    const query = parseQuery(c, flowListQuerySchema);
+    const rows = await listFlowsForTenant(deps.db, tenantId, { search: query.search, limit: query.limit });
 
     return respondWithData(c, rows.map(toFlowResponse));
   });
@@ -297,7 +245,7 @@ export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
     const { tenantId } = getRequestContext(c);
     const flowId = parseUuidParam(c, FLOW_ID_PARAM);
     const runId = parseUuidParam(c, "runId");
-    const run = await findRunForTenant(deps.db, tenantId, runId);
+    const run = await findRunWithFlowForTenant(deps.db, tenantId, runId);
 
     // The flow id has to match as well as the tenant: a run reached through the wrong flow's URL is not this
     // flow's run, and answering with it would let one flow's history be read through another's address.
@@ -307,7 +255,7 @@ export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
 
     const steps = await listStepRunsForRun(deps.db, tenantId, runId);
 
-    return respondWithData(c, { ...toRunResponse(run), steps: steps.map(toStepRunResponse) });
+    return respondWithData(c, toRunDetailResponse(run, steps));
   });
 
   routes.delete(FLOW_ID_ROUTE, async (c) => {

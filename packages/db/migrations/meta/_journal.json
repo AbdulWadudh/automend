@@ -50,6 +50,13 @@
       "when": 1787079045424,
       "tag": "0006_red_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787093189894,
+      "tag": "0007_yellow_supernaut",
+      "breakpoints": true
     }
   ]
 }

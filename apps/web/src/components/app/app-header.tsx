@@ -14,6 +14,7 @@ const NAV_LINK_CLASS =
 /** `data-status="active"` is set by the router on the link matching the current route. */
 const sections = [
   { to: routes.flows, label: "Flows" },
+  { to: routes.runs, label: "Runs" },
   { to: routes.connections, label: "Connections" },
 ];
 

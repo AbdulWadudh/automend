@@ -34,6 +34,17 @@ export type Flow = z.infer<typeof flowSchema>;
 export const flowListSchema = z.array(flowSchema);
 
 /**
+ * `limit` has no default: absent means every flow, which is what the flows page has always asked for.
+ * Only the picker sends one, and only the picker needs its results bounded.
+ */
+export const flowListQuerySchema = z.object({
+  search: z.string().trim().max(config.flows.picker.maxQueryLength).optional(),
+  limit: z.coerce.number().int().positive().max(config.flows.picker.maxResultLimit).optional(),
+});
+
+export type FlowListQuery = z.infer<typeof flowListQuerySchema>;
+
+/**
  * `tenantId` is deliberately absent: it comes from the caller's session, never from the body.
  * Accepting it would let a request write into another workspace.
  */

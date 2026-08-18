@@ -9,6 +9,7 @@ import {
   type CreateFlowRequest,
   type Flow,
   type FlowDelivery,
+  type FlowListQuery,
   flowDeliveryListSchema,
   flowListSchema,
   flowSchema,
@@ -21,13 +22,31 @@ const FLOWS_PATH = "/flows";
 
 export const flowQueryKeys = {
   all: ["flows"] as const,
-  list: () => [...flowQueryKeys.all, "list"] as const,
+  /** Every listing, whatever it searched for — what a mutation invalidates. */
+  lists: () => [...flowQueryKeys.all, "list"] as const,
+  list: (query: FlowListQuery = {}) => [...flowQueryKeys.lists(), query] as const,
   detail: (flowId: string) => [...flowQueryKeys.all, "detail", flowId] as const,
   deliveries: (flowId: string) => [...flowQueryKeys.all, "deliveries", flowId] as const,
 };
 
-export async function listFlows(signal?: AbortSignal): Promise<Flow[]> {
-  return await requestApi({ path: FLOWS_PATH, schema: flowListSchema, signal });
+export async function listFlows(query: FlowListQuery = {}, signal?: AbortSignal): Promise<Flow[]> {
+  const search = new URLSearchParams();
+
+  if (query.search) {
+    search.set("search", query.search);
+  }
+
+  if (query.limit !== undefined) {
+    search.set("limit", String(query.limit));
+  }
+
+  const suffix = search.toString();
+
+  return await requestApi({
+    path: suffix ? `${FLOWS_PATH}?${suffix}` : FLOWS_PATH,
+    schema: flowListSchema,
+    signal,
+  });
 }
 
 export async function getFlow(flowId: string, signal?: AbortSignal): Promise<Flow> {

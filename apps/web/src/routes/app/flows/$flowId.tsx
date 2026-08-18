@@ -104,7 +104,7 @@ function FlowBuilder({ flow }: { flow: Flow }) {
     onSuccess: async (updated) => {
       setSavedSnapshot(JSON.stringify({ name: updated.name, definition: updated.definition }));
       queryClient.setQueryData(flowQueryKeys.detail(flow.id), updated);
-      await queryClient.invalidateQueries({ queryKey: flowQueryKeys.list() });
+      await queryClient.invalidateQueries({ queryKey: flowQueryKeys.lists() });
     },
   });
 

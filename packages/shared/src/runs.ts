@@ -135,6 +135,8 @@ export const flowRunSchema = z.object({
   /** What the trigger produced, which is what the first step's variables resolve against. */
   triggerPayload: z.unknown(),
   error: runErrorSchema.nullable(),
+  /** The run this one repeats. A retrigger is a new run, so the old journal stays intact. */
+  retryOfRunId: z.uuid().nullable(),
   startedAt: z.iso.datetime().nullable(),
   finishedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
@@ -144,8 +146,22 @@ export type FlowRun = z.infer<typeof flowRunSchema>;
 
 export const flowRunListSchema = z.array(flowRunSchema);
 
-/** A run with its journal, which is what the builder shows when somebody opens one. */
+/**
+ * What has been started *from* this run, which is how a failure says whether anybody has dealt with it.
+ * Without it a handled failure looks exactly like an untouched one, and retries pile up unnoticed.
+ */
+export const runRetrySummarySchema = z.object({
+  count: z.number().int().nonnegative(),
+  latestRunId: z.uuid().nullable(),
+  latestStatus: z.enum(RUN_STATUSES).nullable(),
+});
+
+export type RunRetrySummary = z.infer<typeof runRetrySummarySchema>;
+
+/** A run with its journal, which is what the builder and the dashboard show when somebody opens one. */
 export const flowRunDetailSchema = flowRunSchema.extend({
+  flowName: z.string(),
+  retries: runRetrySummarySchema,
   steps: z.array(flowStepRunSchema),
 });
 
@@ -169,3 +185,70 @@ export const startFlowRunRequestSchema = z.object({
 });
 
 export type StartFlowRunRequest = z.infer<typeof startFlowRunRequestSchema>;
+
+/** `duplicate` means a replayed key resolved to an existing run rather than starting a second one. */
+export const startedRunSchema = z.object({
+  runId: z.uuid(),
+  duplicate: z.boolean(),
+});
+
+export type StartedRun = z.infer<typeof startedRunSchema>;
+
+/**
+ * `gestureToken` is the caller's own name for one press of the button, which is the only thing that can
+ * tell an accidental double-click from a deliberate second retrigger — the server sees identical
+ * requests either way. The source run is in the key too, so two runs' tokens can never collide.
+ */
+export function buildRetriggerIdempotencyKey(sourceRunId: string, gestureToken: string): string {
+  return buildRunIdempotencyKey("manual", `retrigger:${sourceRunId}:${gestureToken}`);
+}
+
+/** The key is optional, and so is the body: omitting either means "start a new one". */
+export const retriggerRunRequestSchema = z
+  .object({
+    idempotencyKey: z
+      .string()
+      .min(config.validation.idempotencyKey.minLength)
+      .max(config.validation.idempotencyKey.maxLength)
+      .optional(),
+  })
+  .default({});
+
+export type RetriggerRunRequest = z.infer<typeof retriggerRunRequestSchema>;
+
+/** Null when nothing has started — a queued run has no duration, and zero would read as instant. */
+export function runDurationMs(
+  timestamps: { startedAt: string | null; finishedAt: string | null },
+  nowMs: number = Date.now(),
+): number | null {
+  if (!timestamps.startedAt) {
+    return null;
+  }
+
+  const startedMs = Date.parse(timestamps.startedAt);
+  const endedMs = timestamps.finishedAt ? Date.parse(timestamps.finishedAt) : nowMs;
+
+  // Clocks are not monotonic across a worker restart, and a negative duration reads as a page bug.
+  return Math.max(0, endedMs - startedMs);
+}
+
+export function formatDurationMs(durationMs: number): string {
+  if (durationMs < 1_000) {
+    return `${Math.round(durationMs)}ms`;
+  }
+
+  const totalSeconds = durationMs / 1_000;
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds.toFixed(totalSeconds < 10 ? 2 : 1)}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.round(totalSeconds % 60);
+
+  if (minutes < 60) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}

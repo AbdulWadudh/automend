@@ -12,6 +12,7 @@ import { createHookRoutes } from "./routes/hooks";
 import { createKitRoutes } from "./routes/kits";
 import { createOperationsRoutes } from "./routes/operations";
 import { createQueueDashboardRoutes } from "./routes/queue-dashboard";
+import { createRunRoutes } from "./routes/runs";
 
 export function createApp(deps: ApiDependencies): Hono {
   const app = new Hono();
@@ -41,6 +42,8 @@ export function createApp(deps: ApiDependencies): Hono {
   app.route(config.http.routes.apiHealth, healthRoutes);
   app.route(config.http.routes.authProviders, createAuthProviderRoutes(deps));
   app.route(config.http.routes.flows, createFlowRoutes(deps));
+  // What the run dashboard reads: runs across every flow, addressed by their own id.
+  app.route(config.http.routes.runs, createRunRoutes(deps));
   app.route(config.http.routes.connections, createConnectionRoutes(deps));
   app.route(config.http.routes.kits, createKitRoutes(deps));
   // What the Operations page reads and posts to: which consoles exist, and the operator password.

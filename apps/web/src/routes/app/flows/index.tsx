@@ -26,7 +26,7 @@ function NewFlowForm() {
     mutationFn: () => createFlow({ name: name.trim() }),
     onSuccess: async () => {
       setName("");
-      await queryClient.invalidateQueries({ queryKey: flowQueryKeys.list() });
+      await queryClient.invalidateQueries({ queryKey: flowQueryKeys.lists() });
     },
   });
 
@@ -68,7 +68,7 @@ function FlowCard({ flow }: { flow: Flow }) {
   const remove = useMutation({
     mutationFn: () => deleteFlow(flow.id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: flowQueryKeys.list() });
+      await queryClient.invalidateQueries({ queryKey: flowQueryKeys.lists() });
     },
   });
 
@@ -120,7 +120,7 @@ function FlowCard({ flow }: { flow: Flow }) {
 function FlowsPage() {
   const flows = useQuery({
     queryKey: flowQueryKeys.list(),
-    queryFn: ({ signal }) => listFlows(signal),
+    queryFn: ({ signal }) => listFlows({}, signal),
   });
 
   return (

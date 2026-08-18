@@ -1,3 +1,4 @@
+import { createDefaultFlowDefinition, type FlowDefinition } from "@automend/shared";
 import { eq } from "drizzle-orm";
 import { createDatabaseClient, type Database } from "../../src/client";
 import { flows, organization } from "../../src/schema";
@@ -28,13 +29,12 @@ export function databaseUrl(): string | undefined {
 }
 
 /**
- * The definition snapshot every run in these tests carries.
- *
- * Deliberately minimal and cast at the boundary: these tests are about the run tables, and pinning them to
- * the current definition shape would make every future definition change break them for no reason.
+ * Asked of the domain rather than written out here, because `listFlowsForTenant` runs every stored
+ * definition through `upgradeFlowDefinition` on read — a hand-written stub is a row the flow queries
+ * cannot read back.
  */
-export function stubDefinition(): never {
-  return { version: 1, steps: [], edges: [] } as never;
+export function stubDefinition(): FlowDefinition {
+  return createDefaultFlowDefinition();
 }
 
 export async function setupDatabase(): Promise<TestDatabase> {
