@@ -332,11 +332,19 @@ describeWithDatabase("run persistence", () => {
     });
   });
 
+  /**
+   * Larger than anything these tests write, because `claimOutboxBatch` is global by design — it is the
+   * relay, and the relay has no tenant. With the production batch size, unpublished rows left behind by
+   * earlier tests can crowd out the row the test just wrote, which fails as an empty id rather than as
+   * the volume problem it is.
+   */
+  const CLAIM_EVERYTHING = 1_000;
+
   describe("the outbox relay", () => {
     test("claims unpublished rows and counts the attempt", async () => {
       const created = await createFlowRunWithOutbox(context.db, runValues(`outbox-${crypto.randomUUID()}`));
 
-      const claimed = await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+      const claimed = await claimOutboxBatch(context.db, CLAIM_EVERYTHING, config.outbox.maxAttempts);
       const mine = claimed.find((entry) => entry.runId === created.id);
 
       expect(mine).toBeDefined();
@@ -365,7 +373,7 @@ describeWithDatabase("run persistence", () => {
 
     test("a published row is not claimed again", async () => {
       const created = await createFlowRunWithOutbox(context.db, runValues(`publish-${crypto.randomUUID()}`));
-      const claimed = await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+      const claimed = await claimOutboxBatch(context.db, CLAIM_EVERYTHING, config.outbox.maxAttempts);
       const mine = claimed.find((entry) => entry.runId === created.id);
 
       await markOutboxPublished(context.db, [mine?.id ?? ""]);
@@ -384,7 +392,7 @@ describeWithDatabase("run persistence", () => {
      */
     test("a failed publish keeps its reason and stays unpublished for the next pass", async () => {
       const created = await createFlowRunWithOutbox(context.db, runValues(`fail-${crypto.randomUUID()}`));
-      const claimed = await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+      const claimed = await claimOutboxBatch(context.db, CLAIM_EVERYTHING, config.outbox.maxAttempts);
       const mine = claimed.find((entry) => entry.runId === created.id);
 
       await markOutboxFailed(context.db, mine?.id ?? "", "Redis was unreachable");
@@ -399,7 +407,7 @@ describeWithDatabase("run persistence", () => {
       const created = await createFlowRunWithOutbox(context.db, runValues(`exhaust-${crypto.randomUUID()}`));
 
       for (let pass = 0; pass < config.outbox.maxAttempts + 2; pass += 1) {
-        await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+        await claimOutboxBatch(context.db, CLAIM_EVERYTHING, config.outbox.maxAttempts);
       }
 
       const [row] = await context.db.select().from(flowRunOutbox).where(eq(flowRunOutbox.runId, created.id));
@@ -414,7 +422,7 @@ describeWithDatabase("run persistence", () => {
      */
     test("a failure with no message still records a reason", async () => {
       const created = await createFlowRunWithOutbox(context.db, runValues(`noreason-${crypto.randomUUID()}`));
-      const claimed = await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+      const claimed = await claimOutboxBatch(context.db, CLAIM_EVERYTHING, config.outbox.maxAttempts);
       const mine = claimed.find((entry) => entry.runId === created.id);
 
       await markOutboxFailed(context.db, mine?.id ?? "", "");
@@ -433,7 +441,7 @@ describeWithDatabase("run persistence", () => {
       const created = await createFlowRunWithOutbox(context.db, runValues(`revive-${crypto.randomUUID()}`));
 
       for (let pass = 0; pass < config.outbox.maxAttempts + 1; pass += 1) {
-        await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+        await claimOutboxBatch(context.db, CLAIM_EVERYTHING, config.outbox.maxAttempts);
       }
 
       const [exhausted] = await context.db.select().from(flowRunOutbox).where(eq(flowRunOutbox.runId, created.id));
@@ -452,7 +460,7 @@ describeWithDatabase("run persistence", () => {
       expect(row?.lastError).toBe("Redis was unreachable");
 
       // Claimable again, which is the whole point.
-      const reclaimed = await claimOutboxBatch(context.db, config.outbox.batchSize, config.outbox.maxAttempts);
+      const reclaimed = await claimOutboxBatch(context.db, CLAIM_EVERYTHING, config.outbox.maxAttempts);
 
       expect(reclaimed.some((entry) => entry.runId === created.id)).toBe(true);
     });
