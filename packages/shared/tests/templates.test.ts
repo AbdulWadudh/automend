@@ -144,14 +144,49 @@ describe("every variable offered is one that resolves", () => {
     }
   });
 
-  test("without the prefix, every path it offers is unresolvable — which was the bug", () => {
+  /**
+   * Rewritten, and the rewrite is the record of a decision.
+   *
+   * This used to assert that an unprefixed path was *unresolvable*, which is what made the picker's omission
+   * fatal. It is now resolvable on purpose: `{{email}}` is what somebody writes having just posted a body with
+   * an `email` field, and a rule the data gives no hint of is a rule that gets broken. What must hold is that
+   * the shorthand and the explicit form reach the *same value* — two spellings, never two meanings.
+   */
+  test("a rootless path reaches the same value the explicit one does", () => {
     const variables = listSampleVariables(payload);
 
     expect(variables.length).toBeGreaterThan(0);
 
     for (const variable of variables) {
-      expect(renderTemplate(toTemplateToken(variable.path), context).unresolved).toEqual([variable.path]);
+      const shorthand = renderTemplate(toTemplateToken(variable.path), context);
+      const explicit = renderTemplate(toTemplateToken(`${triggerVariablePrefix}.${variable.path}`), context);
+
+      expect(shorthand.unresolved).toEqual([]);
+      expect(shorthand.text).toBe(explicit.text);
     }
+  });
+
+  test("a name that is in neither place is still reported", () => {
+    // The fallbacks widen where a path is looked for; they must not turn a genuine miss into silence.
+    expect(renderTemplate("{{noSuchField}}", context).unresolved).toEqual(["noSuchField"]);
+  });
+
+  test("a body field shadows an envelope field of the same name", () => {
+    // The tie-break, asserted rather than left to the order of a config array: the body is the part the author
+    // controls, so it is what a bare name means.
+    const collides = { [triggerVariablePrefix]: { body: { method: "from-the-body" }, method: "POST" } };
+
+    expect(renderTemplate("{{method}}", collides).text).toBe("from-the-body");
+    // ...and the explicit path still reaches exactly what it names.
+    expect(renderTemplate(`{{${triggerVariablePrefix}.method}}`, collides).text).toBe("POST");
+  });
+
+  test("an explicit root is never rewritten, so a wrong explicit path fails loudly", () => {
+    // `{{trigger.email}}` names a place that does not exist. Silently falling back to `trigger.body.email`
+    // would make the two roots interchangeable and the explicit form meaningless.
+    expect(renderTemplate(`{{${triggerVariablePrefix}.email}}`, context).unresolved).toEqual([
+      `${triggerVariablePrefix}.email`,
+    ]);
   });
 
   test("the prefix is added to the path and kept out of the label", () => {

@@ -99,11 +99,59 @@ function stringify(value: unknown): string {
   return String(value);
 }
 
+/**
+ * The roots a path may name explicitly, and so the paths that are never rewritten.
+ */
+const EXPLICIT_ROOTS = new Set<string>([templates.triggerVariablePrefix, templates.stepsVariablePrefix]);
+
+/**
+ * Every place a path may be looked for, most specific first.
+ *
+ * A path that names a root — `trigger.body.email`, `steps.lookUpTheOrder.total` — is looked for exactly
+ * where it says and nowhere else. Explicit wins, always, so a template that spells out its root can only ever
+ * mean one thing and the variable picker's own output is unambiguous by construction.
+ *
+ * A path that names no root is a *shorthand*, and this is where it is resolved. `{{email}}` is what somebody
+ * writes having just posted a body with an `email` field, and requiring `{{trigger.body.email}}` for it is a
+ * rule the data itself gives no hint of. So the body is tried first — that is what a rootless name almost
+ * always means — and then the trigger's envelope, which is what lets `{{method}}` work as well.
+ *
+ * The order is the tie-break, and it is deliberate: a body field shadows an envelope field of the same name,
+ * because the body is the part the author controls.
+ */
+function candidatePathsFor(path: string): string[] {
+  const [root] = path.split(".");
+
+  if (root !== undefined && EXPLICIT_ROOTS.has(root)) {
+    return [path];
+  }
+
+  return [...templates.rootlessVariableFallbacks.map((fallback) => `${fallback}.${path}`), path];
+}
+
+/**
+ * The first candidate that resolves, or `undefined` when none do.
+ *
+ * `undefined` and "absent" are the same answer here. A key explicitly set to `undefined` is not something JSON
+ * can carry, so nothing arriving over a webhook can produce one.
+ */
+function resolveVariable(context: unknown, path: string): unknown {
+  for (const candidate of candidatePathsFor(path)) {
+    const value = resolvePath(context, candidate);
+
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 export function renderTemplate(template: string, context: unknown): RenderedTemplate {
   const unresolved: string[] = [];
 
   const text = template.replace(VARIABLE_PATTERN, (whole, path: string) => {
-    const value = resolvePath(context, path);
+    const value = resolveVariable(context, path);
 
     if (value === undefined) {
       unresolved.push(path);

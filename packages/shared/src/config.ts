@@ -628,6 +628,18 @@ export const config = {
        */
       triggerVariablePrefix: "trigger",
       stepsVariablePrefix: "steps",
+      /**
+       * Where a path that names *no* root is looked for, in order.
+       *
+       * `{{email}}` is what somebody writes when the webhook they just sent had an `email` field, and
+       * insisting on `{{trigger.body.email}}` for it is a rule the data gives no hint of. So a rootless path
+       * is tried against the trigger's body first — the overwhelmingly common intent — and then against the
+       * trigger's own envelope, which is what makes `{{method}}` work too.
+       *
+       * A path that *does* begin with a root above is never rewritten. Explicit always wins, so a template
+       * can always reach exactly one thing and the picker's own output is never ambiguous.
+       */
+      rootlessVariableFallbacks: ["trigger.body", "trigger"],
       /** How deep into a received payload the variable picker will look for values to offer. */
       maxSampleDepth: 6,
       /** A cap on what the picker lists, so a large payload cannot produce an unusable menu. */
@@ -843,9 +855,14 @@ export const config = {
        * failed one is work somebody may still want to read or re-run, and the whole point of keeping it is
        * that it outlives the noise of the successes around it.
        *
-       * Note what this does *not* cover: a run whose step failed is still a *job that completed*, because
-       * the worker records the outcome in Postgres and returns normally. Only infrastructure failures — an
-       * uncaught throw, a stall, an unparseable payload — land in the failed set.
+       * Which set a failure lands in is not obvious, and worth writing down because it misleads otherwise.
+       * A failed run *does* fail its job: the processor rethrows once the journal is written. But BullMQ then
+       * retries, and the retry finds the run already settled and returns without executing anything — so the
+       * job ends up **completed**. The failed set therefore holds almost nothing: a run still mid-retry, or one
+       * that died outside a step.
+       *
+       * The consequence is that the queue cannot be read as the record of what succeeded. `flow_runs` and
+       * `flow_step_runs` are; the job's `returnValue` summary is what makes the queue's own view honest about it.
        */
       retention: {
         completedJobs: 250,

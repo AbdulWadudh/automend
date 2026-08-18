@@ -66,11 +66,13 @@ successful job the instant it finished, so a run that had plainly executed left 
 
 ### One thing retention does *not* fix
 
-A run whose **step** failed is still a **job that completed**. The worker records the outcome in Postgres and
-returns normally, so BullMQ never sees a failure — and that is correct, because retrying the whole job would
-not fix a bad `To` header. Only infrastructure failures reach the failed set: an uncaught throw, a stall, an
-unparseable payload. The queue dashboard is for the queue; `flow_runs` and `flow_step_runs` are where a
-step's own outcome lives.
+A failed run mostly does not appear in the **failed** set, and the mechanism is worth stating precisely because
+the obvious guess is wrong. The processor *does* rethrow once the journal is written, so the job's first attempt
+fails. BullMQ then retries; the retry finds the run already settled and returns without executing anything; the
+job ends up **completed**. So the failed set holds only a run still mid-retry or one that died outside a step.
+
+The queue therefore cannot be read as the record of what succeeded — `flow_runs` and `flow_step_runs` are that.
+A follow-up change adds a `returnValue` summary so the queue's own view says which of the two happened.
 
 ## Action required
 
@@ -95,10 +97,10 @@ Run rather than reasoned about:
   right value: `{{trigger.body.email}}` → `abdulwadudh5@gmail.com`, `{{trigger.body.name}}` → `Lynda Huels`,
   plus `{{trigger.method}}` and `{{trigger.headers.content-type}}`. Before the fix all four body paths
   reported unresolved.
-- **The invariant test** in `packages/shared/tests/templates.test.ts` asserts both directions: with the
-  prefix nothing the picker offers is unresolvable, and *without* it every path is — so the test fails if the
-  prefix is ever dropped again. `apps/worker/tests/engine/resolve-input.test.ts` pins the other half, that
-  the configured prefix is the key the engine actually builds the context under.
+- **The invariant test** in `packages/shared/tests/templates.test.ts` asserts that nothing the picker offers is
+  unresolvable, so it fails if the prefix is ever dropped again.
+  `apps/worker/tests/engine/resolve-input.test.ts` pins the other half — that the configured prefix is the key
+  the engine actually builds the context under.
 - **Retention, against a real Redis.** A throwaway queue with the relay's exact options processed six jobs
   (three succeeding, three failing) and both sets survived: `completed: 3, failed: 3`. Under
   `removeOnComplete: true` the completed count would have been `0`, which is what the empty dashboard was.
