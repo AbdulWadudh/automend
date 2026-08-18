@@ -16,6 +16,8 @@ COPY apps/worker/package.json ./apps/worker/
 # validates the whole lockfile, and a member missing its package.json fails the install.
 COPY packages/auth/package.json ./packages/auth/
 COPY packages/db/package.json ./packages/db/
+COPY packages/kit-framework/package.json ./packages/kit-framework/
+COPY packages/kits/package.json ./packages/kits/
 COPY packages/shared/package.json ./packages/shared/
 RUN bun install --frozen-lockfile --production --filter "@automend/worker"
 
@@ -27,7 +29,10 @@ COPY --from=deps /app ./
 # Each workspace's tsconfig.json extends the root one; Bun reads it when running TypeScript.
 COPY tsconfig.base.json ./
 COPY packages/shared ./packages/shared
+COPY packages/kit-framework ./packages/kit-framework
+COPY packages/kits ./packages/kits
 COPY packages/db ./packages/db
+COPY packages/auth ./packages/auth
 COPY apps/worker ./apps/worker
 
 USER bun

@@ -142,7 +142,7 @@ services:
       # api — not copies. Configured differently it would refresh nothing and decrypt nothing.
       AUTH_SECRET: ${AUTH_SECRET}
       SECRETS_KEY: ${SECRETS_KEY}
-      AUTH_BASE_URL: ${AUTH_BASE_URL:-http://localhost:5173}
+      AUTH_BASE_URL: ${AUTH_BASE_URL}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}

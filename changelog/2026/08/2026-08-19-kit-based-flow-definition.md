@@ -107,8 +107,8 @@ credentials for the service, or no scheduler for that kind of trigger yet.
 
 ## Action required
 
-**None beyond the migration from the previous change.** Existing flows are upgraded on read; no migration, no
-environment variables, no manual editing.
+**None.** Existing flows are upgraded on read — no migration of its own, no environment variables, no manual
+editing. The previous change's migration is applied by the `migrate` service on deploy.
 
 **Breaking for API clients that post definitions directly.** A v1 definition is rejected by
 `flowDefinitionSchema` on the way *in* — the upgrade applies to reading stored rows, not to accepting new ones.

@@ -131,7 +131,7 @@ deployment genuinely automates against a service on its own network; read the no
 compose files pass them; a hand-rolled deployment must too, or the worker will refuse to start. That is deliberate:
 starting up and failing to resolve a credential mid-run would be worse.
 
-No migration beyond the one from the run-persistence change.
+No migration of its own; the run-persistence change's is applied by the `migrate` service on deploy.
 
 ## Verification
 

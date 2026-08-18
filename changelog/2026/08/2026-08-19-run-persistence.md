@@ -87,8 +87,13 @@ to own it is orphaned state that nothing can find, clear, or explain.
 
 ## Action required
 
-**Run `bun run db:migrate`.** Five new tables; no existing table or column changes, so the migration
-applies cleanly to a populated database.
+**Nothing to run by hand.** Five new tables, applied by the `migrate` service both compose files already
+define — it runs `packages/db/src/migrate.ts` from the API image, and api, worker and web all wait on
+`service_completed_successfully`, so a deploy migrates before anything serves. There is no existing
+table or column change, so it applies cleanly to a populated database.
+
+`bun run db:migrate` exists for working against a database *outside* the compose stack; it is a
+developer convenience, not the deployment path.
 
 No new environment variables — `config.runs` and `config.outbox` are application constants, and
 `.env.example` is unchanged.

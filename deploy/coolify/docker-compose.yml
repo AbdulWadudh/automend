@@ -138,8 +138,8 @@ services:
       # The engine resolves each step's credentials itself, so the worker needs the same auth values as the api —
       # the same values, not copies. Given different ones it would refresh nothing and decrypt nothing.
       AUTH_SECRET: ${SERVICE_PASSWORD_64_AUTH}
-      SECRETS_KEY: ${SECRETS_KEY:?generate with: openssl rand -base64 32}
-      AUTH_BASE_URL: ${PUBLIC_WEB_URL:?set this to the address the browser uses}
+      SECRETS_KEY: "${SECRETS_KEY:?generate one with openssl rand -base64 32}"
+      AUTH_BASE_URL: "${PUBLIC_WEB_URL:?set this to the web app's own address, e.g. https://automend.example.com}"
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}

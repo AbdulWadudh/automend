@@ -409,6 +409,19 @@ Each of these was a real defect shipped in this codebase, not a style preference
 - **Run the code before claiming it works.** Every platform problem in the engine — Bun's IPC pipe
   failing on Windows, a file URL's leading slash, two SSRF bypasses — was found by executing it, not by
   reading it. A typecheck proves the shapes agree, not that anything happens.
+- **Run `bun run verify`, not just `typecheck` and `test`, for anything that touches a package
+  boundary, a `Dockerfile`, or a compose file.** Those three gates — compose files resolve, container
+  images build, migrations apply to a populated database — are the only ones that catch a whole class of
+  problem, and the class is "the code is correct and the deployment is broken". Adding two workspace
+  packages once left all three images unable to build, because `bun install --frozen-lockfile` needs
+  every manifest the lockfile mentions and no `Dockerfile` copied the new ones. That exact failure is the
+  first one `scripts/verify.ts` names in its header comment.
+
+  There is no terminal on the deployed server. **Everything is a compose service or a `package.json`
+  script**, so a step that requires someone to log in and run something is not a plan. Migrations are
+  applied by the `migrate` service, which `api`, `worker` and `web` all wait on with
+  `service_completed_successfully` — never by hand. `bun run db:migrate` is for a database outside the
+  compose stack, and does not belong under "Action required" in a changelog.
 - Every bug fix gets a regression test before the fix, where practical.
 - Don't chase 100% coverage; do make sure the non-negotiable rules above (idempotency, tenant
   scoping, sandboxing) are the parts that are actually tested.
