@@ -36,24 +36,40 @@ secure, and easy for a human to read and extend, not clever.
 
 ```
 apps/
-  api/            Hono API — routes, auth, queue producers
-  worker/         BullMQ consumers — flow execution engine
+  api/            Hono API — routes, auth, run producers, the kit catalogue endpoint
+  worker/         BullMQ consumers, the outbox relay, and the execution engine
+    src/engine/   The engine: the DAG walk in the parent, one action at a time in a subprocess
   web/            React app — flow builder UI
 packages/
   db/             Drizzle schema, migrations, query helpers (imported by api + worker)
   shared/         Zod schemas, shared types, constants (imported by all apps)
+  kit-framework/  The SDK a kit is written against. Browser-safe, so the builder may import it
+  kits/           One directory per service: core, http, gmail. Imported by api + worker, never web
 ```
 
 Each `apps/*` has its own `Dockerfile`. `packages/*` are internal, never published, imported via
 workspace protocol.
 
+**Dependency direction, which is load-bearing:** `shared` depends on nothing. `kit-framework` depends
+on `shared`. `kits` depends on both. `db` depends on `kits` (it upgrades stored definitions on read).
+Nothing depends on an app. `apps/web` must never import `packages/kits` — a kit's code calls
+third-party APIs and has no business in a browser bundle, which is why the catalogue is served over
+HTTP instead.
+
 ## Non-negotiable engineering rules
 
 These override convenience every time:
 
-1. **Never execute user-authored flow code in the API or worker's main process.** Step execution
-   for arbitrary/untrusted code must run in an isolated subprocess with a timeout and resource
-   limit. This is not optional, even in early prototypes.
+1. **Never execute flow step code in the API or worker's main process.** It runs in the engine
+   subprocess (`apps/worker/src/engine/`), and the boundary is real: the child has no database
+   client, no secrets key, and an allowlisted `env`, so `DATABASE_URL` and `SECRETS_KEY` are not
+   present to be read. It receives one step's input and one credential at a time.
+
+   Be precise about what that does and does not enforce, because the gap is where a false sense of
+   safety lives. **Enforced:** a wall-clock cap on the run and on each step, an output cap, and
+   network access only through the guarded client in `engine/http-client.ts`. **Not enforced,
+   because Bun's spawn options do not provide it:** memory, CPU, filesystem or network isolation. A
+   memory ceiling is a container concern. Never describe this as a sandbox without saying which.
 2. **Every flow execution and every step execution needs an idempotency key.** Retrying a step
    must never re-trigger a side effect (double email, double charge). Check-then-act on the key
    inside a DB transaction, never a bare check.
@@ -71,6 +87,81 @@ These override convenience every time:
 8. **No secrets, `.env` files, or credentials committed to git.** Env vars are read via a single
    typed config module (`packages/shared/env.ts`) that validates with Zod at startup and fails
    fast if anything required is missing.
+
+## Kits — how a service gets added
+
+A **kit** is one service's worth of capability: the actions a flow can take and the triggers that can
+start one. Adding a service is adding a directory under `packages/kits/src/` and one line in
+`registry.ts`. If a change to support a new service touches the builder, the shared schemas, or a
+lookup map, something has gone wrong — go back and find the declaration you should have used instead.
+
+| Term | Means |
+|---|---|
+| **Kit** | One service — `gmail`, `http`, `core` |
+| **Action** | Something a kit does — `gmail.sendEmail` |
+| **Trigger** | Something that starts a flow — `gmail.newEmail` |
+| **Connector** | A credential *type* a workspace can authorise (`config.connectors.providers`) |
+| **Connection** | A workspace's authorised instance of a connector (`connections` table) |
+| **Run** | One execution of a flow (`flow_runs`) |
+| **Step run** | One step's attempt within a run (`flow_step_runs`) |
+
+A kit *names* the connector it needs; it never holds a credential. The engine resolves the connection
+and hands the kit one access token for one step.
+
+### Naming
+
+Kit ids and action and trigger names are **camelCase**: `gmail.sendEmail`, `googleSheets.addRow`.
+They are identifiers a kit author types and a stored flow refers to. Files and directories stay
+**kebab-case**, like everything else here — `src/gmail/actions/send-email.ts` exports
+`gmailSendEmailAction` whose `name` is `"sendEmail"`. `createKit` enforces the pattern at import time,
+so a malformed kit stops the process at start-up rather than surfacing later as an inexplicable
+validation error.
+
+### A property has two lives, and this is the thing to understand first
+
+A field that supports `{{variable}}` holds **text** at rest: a number input configured with
+`{{orderCount}}` is the string `"{{orderCount}}"` in the database, and cannot be anything else until
+the flow has data. By the time the kit sees it, it has to be a number. So one property map derives two
+schemas, and conflating them means choosing which to break:
+
+- `buildStoredInputSchema` — what the builder saves through. Checks *types*, not completeness,
+  because a half-configured step is a normal thing to save.
+- `buildResolvedInputSchema` — what the engine validates after substitution. Coerces, applies
+  defaults, enforces `required`.
+
+The corollary: **length bounds are checked at rest, range bounds after resolution.** `maxLength`
+limits what an author can type; `minimum`/`maximum` limit what the data may be, and `{{delayMs}}` has
+no magnitude to check.
+
+### Validation is two layers, and the split is forced
+
+`packages/shared` depends on nothing and the browser imports it, so `flowDefinitionSchema` cannot
+reach the registry:
+
+- **shared** checks structure — node ids, the graph rules, that a kit id is camelCase.
+- **kits** checks meaning — `validateDefinitionAgainstRegistry` resolves the kit and action and
+  validates `input` against the property map they were declared with.
+
+The API calls both on save. The engine calls both again before a run, and that is *not* redundant: a
+run executes a snapshot, and a kit may have changed between the save and a retry.
+
+`findStepsMissingConnections` is deliberately separate, because the answer is allowed to be no. A flow
+saved before its account is connected is a normal state; a *run* that reaches such a step must fail.
+
+### When adding a service
+
+1. `packages/kits/src/<kebab-name>/` with `index.ts` calling `createKit`, and `actions/` and
+   `triggers/` beside it. Declare `auth` with `kitOAuth`/`kitToken` naming an existing connector — if
+   the connector does not exist yet, add it to `config.connectors.providers` first.
+2. Declare every input as a `Property`. Do not hand-write a form; the builder renders from the
+   catalogue. Do not add a step kind anywhere — there are none.
+3. Reach the network only through `ctx.http`. A kit that calls `fetch` bypasses the address rules, the
+   timeout and the response cap, and is the reason those exist in one place.
+4. Add the kit to `kits` in `packages/kits/src/registry.ts`.
+5. Tests in `packages/kits/tests/<name>/`, against a fake `ctx.http` — assert *what the kit asked the
+   service for*, not only what it returned. `tests/registry.test.ts` already asserts the invariants
+   that hold across every kit, including that every scope a kit needs is one its connector requests.
+6. Nothing else. If you find yourself editing `apps/web`, stop and re-read step 2.
 
 ## Configuration — no magic values
 
@@ -306,6 +397,18 @@ Each of these was a real defect shipped in this codebase, not a style preference
 - Business logic (flow validation, execution state transitions, idempotency handling) needs unit
   tests with `bun test`. This is the highest-value test surface in this codebase — prioritize it
   over UI tests early on.
+- **Some guarantees cannot be unit-tested, and faking them is worse than not testing them.**
+  `packages/db/tests/runs.test.ts` runs against a real Postgres, because `ON CONFLICT` deciding a race
+  and `FOR UPDATE SKIP LOCKED` letting two relays work in parallel are *Postgres* behaviour — a mocked
+  Drizzle would assert that the code calls the functions it calls, which is worth nothing when the
+  whole question is what happens when two callers arrive together. Those tests fire callers
+  **concurrently**, skip themselves when `DATABASE_URL` is unset, and are made to actually run by the
+  `run persistence against a real database` gate in `bun run verify` — which fails if they *skipped*
+  rather than passed, since a skipped suite exits 0 and would otherwise turn the gate green having
+  proven nothing.
+- **Run the code before claiming it works.** Every platform problem in the engine — Bun's IPC pipe
+  failing on Windows, a file URL's leading slash, two SSRF bypasses — was found by executing it, not by
+  reading it. A typecheck proves the shapes agree, not that anything happens.
 - Every bug fix gets a regression test before the fix, where practical.
 - Don't chase 100% coverage; do make sure the non-negotiable rules above (idempotency, tenant
   scoping, sandboxing) are the parts that are actually tested.
@@ -362,6 +465,7 @@ changelog/
 
 1. Check if it touches a non-negotiable rule above (idempotency, sandboxing, tenant scoping,
    secrets) — if so, treat that as the actual scope of the task, not an add-on.
+1. If it is "support service X", it is a kit — see the checklist above, and do not touch the builder.
 2. Add/extend the Zod schema in `packages/shared` first if it changes any request/response or job
    payload shape.
 3. Update or add a Drizzle migration if it touches the schema.
