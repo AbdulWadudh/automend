@@ -6,6 +6,8 @@
  * optional.
  */
 
+import { toEmailSafeHtml } from "@automend/shared";
+
 export type MessageBodyType = "text" | "html";
 
 export type OutgoingMessage = {
@@ -60,6 +62,16 @@ function encodeHeaderValue(value: string): string {
  */
 export function buildRawMessage(message: OutgoingMessage): string {
   const contentType = message.bodyType === "html" ? "text/html" : "text/plain";
+  /**
+   * An HTML body composed in the builder carries the editor's own Tailwind class names, and a class name is
+   * worth nothing here: the recipient's client has no stylesheet for it, drops it, and applies its own
+   * paragraph margin instead — which is how a body written with 4px gaps arrives with roughly 48px ones.
+   *
+   * Applied at send rather than only at save because a body stored before that export was fixed still carries
+   * those classes and nothing will rewrite it. Doing it here means an existing flow is correct without anybody
+   * having to re-open and re-save it.
+   */
+  const body = message.bodyType === "html" ? toEmailSafeHtml(message.body) : message.body;
 
   const headers: string[] = [
     `To: ${sanitiseHeaderValue(message.to)}`,
@@ -77,7 +89,7 @@ export function buildRawMessage(message: OutgoingMessage): string {
     "Content-Transfer-Encoding: base64",
   ];
 
-  const encodedBody = Buffer.from(message.body, "utf8").toString("base64");
+  const encodedBody = Buffer.from(body, "utf8").toString("base64");
   // CRLF, because RFC 5322 says so — a bare LF is accepted by some servers and mangled by others.
   const mime = `${headers.join("\r\n")}\r\n\r\n${encodedBody}`;
 

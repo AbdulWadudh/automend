@@ -16,6 +16,7 @@ import {
   type LexicalEditor,
   type LexicalNode,
 } from "lexical";
+import { toEmailSafeHtml } from "./rich-text-styles";
 import { $createVariableNode } from "./variable-node";
 
 /** Matches a token anywhere in stored text, so a saved value can be rebuilt into chips. */
@@ -127,9 +128,15 @@ export function $buildRichContent(editor: LexicalEditor, value: string): void {
  *
  * Variables survive because `VariableNode.exportDOM` writes the token, so the stored HTML contains
  * `{{name}}` as ordinary text — which is exactly what the renderer substitutes into later.
+ *
+ * Passed through `toEmailSafeHtml` because Lexical writes the *editor theme's class names* into its output,
+ * and a class name is worth nothing once the body has left this app: an email client has no Tailwind, drops
+ * `class="mb-1"`, and applies its own paragraph margin instead. What was composed with 4px gaps arrived with
+ * roughly 48px ones. The stored value is therefore the styled-inline form — what somebody typed is what gets
+ * sent, which is the only version of this anybody expects.
  */
 export function $readRichContent(editor: LexicalEditor): string {
-  return $generateHtmlFromNodes(editor, null);
+  return toEmailSafeHtml($generateHtmlFromNodes(editor, null));
 }
 
 export function $readPlainContent(): string {

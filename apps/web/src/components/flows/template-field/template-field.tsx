@@ -13,6 +13,7 @@ import type { LexicalEditor } from "lexical";
 import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { EDITOR_THEME } from "./rich-text-styles";
 import { RichToolbar } from "./rich-toolbar";
 import { $buildPlainContent, $buildRichContent, $readPlainContent, $readRichContent } from "./template-content";
 import { $createVariableNode, VariableNode } from "./variable-node";
@@ -32,24 +33,6 @@ class VariableOption extends MenuOption {
     super(variable.path);
   }
 }
-
-/**
- * Formatting is styled here rather than left to the browser's defaults, which render a list with
- * no indent inside a bordered box and italics that are hard to tell from upright text.
- */
-const EDITOR_THEME = {
-  paragraph: "mb-1 last:mb-0",
-  text: {
-    bold: "font-semibold",
-    italic: "italic",
-    underline: "underline underline-offset-2",
-  },
-  list: {
-    ul: "list-disc pl-5",
-    ol: "list-decimal pl-5",
-    listitem: "mb-0.5",
-  },
-};
 
 export type TemplateFieldProps = {
   id?: string;

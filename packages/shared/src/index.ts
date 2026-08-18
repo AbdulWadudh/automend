@@ -14,5 +14,6 @@ export * from "./flows";
 export * from "./health";
 export * from "./operations";
 export * from "./queue";
+export * from "./rich-text";
 export * from "./runs";
 export * from "./templates";

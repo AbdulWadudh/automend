@@ -147,3 +147,39 @@ describe("reading a header back off a Gmail message", () => {
     expect(findHeader(headers, "subject")).toBe("Hi");
   });
 });
+
+/**
+ * A body composed in the builder carries the editor's Tailwind class names, and nothing rewrites a body that was
+ * stored before the export was fixed. So the message is normalised here, at the last point before the MIME is
+ * built — which is what makes an existing flow render correctly without anybody re-saving it.
+ */
+describe("an HTML body composed in the builder", () => {
+  /** Exactly what was stored for the flow that arrived over-spaced. */
+  const stored =
+    '<p class="mb-1 last:mb-0"><span style="white-space: pre-wrap;">Hi </span><span>Ada</span></p>' +
+    '<p class="mb-1 last:mb-0"><br></p><p class="mb-1 last:mb-0"><span>Body</span></p>';
+
+  test("is sent with inline styles rather than editor class names", () => {
+    const body = decodeBody(buildRawMessage({ to: "a@b.c", subject: "s", body: stored, bodyType: "html" }));
+
+    // The class is what the recipient's client drops, falling back to its own ~16px paragraph margins.
+    expect(body).not.toContain("class=");
+    expect(body).toContain("margin: 0 0 4px");
+  });
+
+  test("keeps the content, the typed spaces and the blank line", () => {
+    const body = decodeBody(buildRawMessage({ to: "a@b.c", subject: "s", body: stored, bodyType: "html" }));
+
+    expect(body).toContain("white-space: pre-wrap");
+    expect(body).toContain("Ada");
+    expect([...body.matchAll(/<br>/g)]).toHaveLength(1);
+  });
+
+  test("a plain-text body is left exactly as it was", () => {
+    // There is no markup to normalise, and rewriting text somebody typed would be a bug of its own.
+    const text = "Hi Ada,\n\nRegards";
+    const body = decodeBody(buildRawMessage({ to: "a@b.c", subject: "s", body: text, bodyType: "text" }));
+
+    expect(body).toBe(text);
+  });
+});
