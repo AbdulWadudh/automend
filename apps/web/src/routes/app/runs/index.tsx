@@ -1,9 +1,10 @@
-import { config } from "@automend/shared";
+import { config, RUN_STATUSES } from "@automend/shared";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { XIcon } from "lucide-react";
 import { useState } from "react";
 import { useDefaultLayout } from "react-resizable-panels";
+import { z } from "zod";
 import { RunDetail } from "@/components/runs/run-detail";
 import { RunList } from "@/components/runs/run-list";
 import { FlowStatsTable, RunTotals, WindowPicker } from "@/components/runs/run-summary";
@@ -21,12 +22,34 @@ const { routes, runIdParam } = config.webClient;
 const FEED_PANEL_ID = "feed";
 const DETAIL_PANEL_ID = "run";
 
+/**
+ * The feed's filters live in the URL rather than in component state.
+ *
+ * A filtered feed is a thing people send each other and come back to, exactly like a single run is —
+ * and it is the only way anything outside this page can open it narrowed to one flow. Validated with
+ * Zod rather than trusted, because a search string is external input like any other: an unparseable
+ * one drops to the unfiltered feed instead of reaching the query.
+ */
+const runsSearchSchema = z.object({
+  flowId: z.uuid().optional(),
+  status: z.enum(RUN_STATUSES).optional(),
+});
+
 function RunsPage() {
   const [windowHours, setWindowHours] = useState<number>(defaultStatsWindowHours);
-  const [filters, setFilters] = useState<RunListFilters>({});
   const [openRunId, setOpenRunId] = useState<string | undefined>(undefined);
   const isNarrow = useIsMobile();
   const navigate = useNavigate();
+  const filters: RunListFilters = Route.useSearch();
+  const setSearch = Route.useNavigate();
+
+  /**
+   * `replace`, so narrowing the feed does not stack a history entry per keystroke of filtering — the
+   * back button should leave the page, not walk back through every filter you tried.
+   */
+  function setFilters(next: RunListFilters) {
+    void setSearch({ search: next, replace: true });
+  }
 
   const savedLayout = useDefaultLayout({
     id: layout.storageId,
@@ -189,5 +212,12 @@ function RunsPage() {
 }
 
 export const Route = createFileRoute("/app/runs/")({
+  // `safeParse`, not `parse`: a hand-edited or stale link should land on the unfiltered feed, not on
+  // an error boundary. Dropping the filter is the recoverable outcome; refusing to render is not.
+  validateSearch: (search: Record<string, unknown>): RunListFilters => {
+    const parsed = runsSearchSchema.safeParse(search);
+
+    return parsed.success ? parsed.data : {};
+  },
   component: RunsPage,
 });

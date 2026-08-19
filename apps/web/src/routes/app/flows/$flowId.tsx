@@ -8,7 +8,7 @@ import {
 } from "@automend/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CheckIcon, CircleAlertIcon, LoaderCircleIcon, WebhookIcon } from "lucide-react";
+import { CheckIcon, CircleAlertIcon, HistoryIcon, LoaderCircleIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDefaultLayout } from "react-resizable-panels";
 import { toast } from "sonner";
@@ -290,14 +290,28 @@ function FlowBuilder({ flow }: { flow: Flow }) {
           onSelect={setSelectedNodeId}
         />
 
-        {draftWebhookPath !== undefined && (
-          <Button variant="outline" size="sm" onClick={() => setIsTestingWebhook((testing) => !testing)}>
-            <WebhookIcon data-icon="inline-start" />
-            {isTestingWebhook ? "Hide test" : "Test webhook"}
-          </Button>
-        )}
+        {/*
+          The actions sit together on the right rather than being split either side of the name field.
+          Test webhook and Runs are both "what does this do when it runs" — they belong beside each
+          other, and beside Save, not scattered along the bar.
+        */}
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          {draftWebhookPath !== undefined && (
+            <Button variant="outline" size="sm" onClick={() => setIsTestingWebhook((testing) => !testing)}>
+              <WebhookIcon data-icon="inline-start" />
+              {isTestingWebhook ? "Hide test" : "Test webhook"}
+            </Button>
+          )}
 
-        <div className="ml-auto flex items-center gap-3">
+          {/* Editing a flow and checking what it did are the same loop, so the way to its history
+              belongs in the builder rather than only back on the list. */}
+          <Button asChild variant="ghost" size="sm">
+            <Link to={routes.runs} search={{ flowId: flow.id }}>
+              <HistoryIcon data-icon="inline-start" />
+              Runs
+            </Link>
+          </Button>
+
           <SaveStatus isSaving={save.isPending} problem={problem} hasUnsavedChanges={hasUnsavedChanges} />
           <ShortcutsHelp open={isShowingShortcuts} onOpenChange={setIsShowingShortcuts} />
           <Button size="sm" disabled={!canSave} onClick={() => save.mutate()}>

@@ -1,7 +1,7 @@
 import { config, type FlowListItem } from "@automend/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CircleDashedIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { CircleDashedIcon, HistoryIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -14,6 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { IconAction } from "@/components/ui/icon-action";
 import { accentForKit, iconForMember } from "@/lib/flow-kinds";
@@ -42,7 +43,11 @@ function describeWhen(iso: string): string {
  * Whether this flow has ever run.
  *
  * A badge, not a chip: it reports state the workspace owns rather than a value anybody can act on, so
- * it is a `span` and not a button. The icon is what carries the meaning — the tint only reinforces it.
+ * it is a `span` and not a link. The icon carries the meaning and the tint reinforces it — a row of
+ * cards distinguished only by hue is unreadable to a good number of people.
+ *
+ * It sits beside the control rather than being the control. Making the badge itself a link is what
+ * hid the way into the runs: a chip that reports state and a chip that navigates look identical.
  */
 function RunBadge({ lastRunAt }: { lastRunAt: string | null }) {
   const hasRun = lastRunAt !== null;
@@ -58,6 +63,27 @@ function RunBadge({ lastRunAt }: { lastRunAt: string | null }) {
       <Icon className="size-3" aria-hidden />
       {hasRun ? `Ran ${describeWhen(lastRunAt)}` : "Never run"}
     </span>
+  );
+}
+
+/**
+ * The way into this flow's runs, and it is always here.
+ *
+ * Present even when the flow has never run: one card with a button beside one without reads as the
+ * feature being missing rather than as a state, and an empty feed is itself the answer to "has this
+ * ever done anything". The badge beside it is what says which.
+ *
+ * `relative z-10` because the card's title link is stretched over the whole surface — without it this
+ * sits underneath and the card's own link swallows the press.
+ */
+function RunsLink({ flow }: { flow: FlowListItem }) {
+  return (
+    <Button asChild size="xs" variant="outline" className="relative z-10 shrink-0">
+      <Link to={routes.runs} search={{ flowId: flow.id }} aria-label={`Runs of ${flow.name}`}>
+        <HistoryIcon data-icon="inline-start" />
+        Runs
+      </Link>
+    </Button>
   );
 }
 
@@ -125,17 +151,27 @@ export function FlowCard({ flow }: { flow: FlowListItem }) {
       </CardHeader>
 
       {flow.description && (
-        <CardContent className="flex-1">
+        <CardContent>
           <p className="line-clamp-2 text-muted-foreground text-sm">{flow.description}</p>
         </CardContent>
       )}
 
-      <CardFooter className="mt-auto flex-wrap items-center justify-between gap-2 border-t pt-4 text-muted-foreground text-xs">
-        <span className="tabular-nums">
+      {/*
+        Two fixed rows rather than one that wraps.
+        
+        Wrapping made the footer's height depend on how long "edited 8 hours ago" happened to be, so a
+        card with a short meta line kept everything on one row and its neighbour pushed the badge onto a
+        second — two cards side by side with different shapes. The rows are always the rows.
+      */}
+      <CardFooter className="mt-auto flex-col items-stretch gap-2.5 border-t pt-4">
+        <span className="text-muted-foreground text-xs tabular-nums">
           {steps.length === 1 ? "1 step" : `${steps.length} steps`} · edited {describeWhen(flow.updatedAt)}
         </span>
 
-        <RunBadge lastRunAt={flow.lastRunAt} />
+        <span className="flex items-center justify-between gap-2">
+          <RunBadge lastRunAt={flow.lastRunAt} />
+          <RunsLink flow={flow} />
+        </span>
       </CardFooter>
 
       {/*
