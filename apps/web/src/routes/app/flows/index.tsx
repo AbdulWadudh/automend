@@ -1,28 +1,47 @@
 import { config } from "@automend/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { PlusIcon, WorkflowIcon } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { FlowCard } from "@/components/flows/flow-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createFlow, flowQueryKeys, listFlows } from "@/lib/flows-api";
 
 const { flowName } = config.validation;
+const { routes, flowIdParam } = config.webClient;
 
-function NewFlowForm() {
+/**
+ * Naming a flow, then landing in it.
+ *
+ * A modal rather than a field in the header: creating a flow is a step on the way to editing one, so
+ * it ends on the canvas rather than back at a list with one more card in it. The header field made
+ * the page look like its own primary job was typing a name.
+ */
+function NewFlowDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
 
   const create = useMutation({
     mutationFn: () => createFlow({ name: name.trim() }),
     onSuccess: async (created) => {
       setName("");
+      onOpenChange(false);
       await queryClient.invalidateQueries({ queryKey: flowQueryKeys.lists() });
-      toast.success(`Created "${created.name}"`);
+      await navigate({ to: routes.flowDetail, params: { [flowIdParam]: created.id } });
     },
     onError: (error) => toast.error("Could not create the flow", { description: error.message }),
   });
@@ -36,26 +55,49 @@ function NewFlowForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <Input
-        aria-label="Name of the new flow"
-        placeholder="Name your flow"
-        value={name}
-        maxLength={flowName.maxLength}
-        onChange={(event) => setName(event.target.value)}
-        className="sm:w-64"
-      />
-      <Button type="submit" disabled={create.isPending || name.trim().length < flowName.minLength}>
-        <PlusIcon />
-        {create.isPending ? "Creating…" : "New flow"}
-      </Button>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // A half-typed name has no reason to survive a dismissal, and reopening to yesterday's draft
+        // is the kind of memory nobody asked for.
+        if (!next) {
+          setName("");
+        }
 
-      {create.isError && (
-        <p role="alert" className="text-destructive text-sm sm:self-center">
-          {create.error.message}
-        </p>
-      )}
-    </form>
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Name your flow</DialogTitle>
+          <DialogDescription>It opens with a trigger already in place — add steps from there.</DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="new-flow-name">Name</Label>
+            <Input
+              id="new-flow-name"
+              value={name}
+              maxLength={flowName.maxLength}
+              placeholder="Send a welcome email"
+              autoFocus
+              onChange={(event) => setName(event.target.value)}
+            />
+            <p className="text-muted-foreground text-xs">You can rename it at any time.</p>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={create.isPending || name.trim().length < flowName.minLength}>
+              {create.isPending ? "Creating…" : "Create and open"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -77,6 +119,8 @@ function FlowCardSkeleton() {
 }
 
 function FlowsPage() {
+  const [isCreating, setIsCreating] = useState(false);
+
   const flows = useQuery({
     queryKey: flowQueryKeys.list(),
     queryFn: ({ signal }) => listFlows({}, signal),
@@ -91,7 +135,10 @@ function FlowsPage() {
             <p className="text-muted-foreground">Everything in this workspace. Open one to edit it on the canvas.</p>
           </div>
 
-          <NewFlowForm />
+          <Button onClick={() => setIsCreating(true)}>
+            <PlusIcon />
+            New flow
+          </Button>
         </div>
 
         {flows.isPending && (
@@ -124,9 +171,13 @@ function FlowsPage() {
             <div className="space-y-1">
               <p className="font-medium">No flows yet</p>
               <p className="max-w-sm text-muted-foreground text-sm">
-                Name one above and it opens with a trigger already in place — add steps from there.
+                A flow opens with a trigger already in place — add steps from there.
               </p>
             </div>
+            <Button variant="outline" onClick={() => setIsCreating(true)}>
+              <PlusIcon />
+              Create your first flow
+            </Button>
           </div>
         )}
 
@@ -137,6 +188,8 @@ function FlowsPage() {
             ))}
           </div>
         )}
+
+        <NewFlowDialog open={isCreating} onOpenChange={setIsCreating} />
       </div>
     </div>
   );
