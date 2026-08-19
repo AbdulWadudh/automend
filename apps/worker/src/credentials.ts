@@ -14,10 +14,10 @@
 
 import { type Auth, toConnectionProviderId } from "@automend/auth";
 import { type Database, findConnectionForTenant, findConnectionSecret } from "@automend/db";
+import type { EngineCredential } from "@automend/kit-runtime";
 import { findKit } from "@automend/kits";
 import { type FlowDefinition, stepExecutionError } from "@automend/shared";
 import { decryptSecret } from "@automend/shared/crypto";
-import type { EngineCredential } from "./engine/protocol";
 
 export type ResolveCredentialsOptions = {
   db: Database;

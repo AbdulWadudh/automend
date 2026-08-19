@@ -19,10 +19,10 @@
 import type { ClaimStepValues, Database, StepClaim } from "@automend/db";
 import { claimStepRun, completeStepRun, findSucceededStepOutputs, recordSkippedStep } from "@automend/db";
 import type { KitRateLimit } from "@automend/kit-framework";
+import type { EngineCredential } from "@automend/kit-runtime";
 import { findAction, findKit } from "@automend/kits";
 import type { FlowDefinition, FlowStepNode, RunError } from "@automend/shared";
 import type { Logger } from "@automend/shared/logger";
-import type { EngineCredential } from "./protocol";
 import { buildLimiterKey } from "./rate-limiter";
 import { buildResolutionContext, buildStepVariableKeys, resolveStepInput, withStepOutput } from "./resolve-input";
 import type { RunContext, StepHost } from "./step-host";

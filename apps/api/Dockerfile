@@ -18,6 +18,7 @@ COPY apps/worker/package.json ./apps/worker/
 COPY packages/auth/package.json ./packages/auth/
 COPY packages/db/package.json ./packages/db/
 COPY packages/kit-framework/package.json ./packages/kit-framework/
+COPY packages/kit-runtime/package.json ./packages/kit-runtime/
 COPY packages/kits/package.json ./packages/kits/
 COPY packages/shared/package.json ./packages/shared/
 RUN bun install --frozen-lockfile --production --filter "@automend/api"
@@ -33,6 +34,7 @@ COPY --from=deps /app ./
 COPY tsconfig.base.json ./
 COPY packages/shared ./packages/shared
 COPY packages/kit-framework ./packages/kit-framework
+COPY packages/kit-runtime ./packages/kit-runtime
 COPY packages/kits ./packages/kits
 COPY packages/db ./packages/db
 COPY packages/auth ./packages/auth

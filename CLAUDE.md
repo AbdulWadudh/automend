@@ -38,13 +38,14 @@ secure, and easy for a human to read and extend, not clever.
 apps/
   api/            Hono API — routes, auth, run producers, the kit catalogue endpoint
   worker/         BullMQ consumers, the outbox relay, and the execution engine
-    src/engine/   The engine: the DAG walk in the parent, one action at a time in a subprocess
+    src/engine/   The DAG walk in the parent, plus the host that drives the subprocess
   web/            React app — flow builder UI
 packages/
   db/             Drizzle schema, migrations, query helpers (imported by api + worker)
   shared/         Zod schemas, shared types, constants (imported by all apps)
   kit-framework/  The SDK a kit is written against. Browser-safe, so the builder may import it
-  kits/           One directory per service: core, http, gmail. Imported by api + worker, never web
+  kit-runtime/    The subprocess kit code runs in, and the protocol across its boundary
+  kits/           One directory per service: core, http, gmail, slack. Imported by api + worker, never web
 ```
 
 Each `apps/*` has its own `Dockerfile`. `packages/*` are internal, never published, imported via
@@ -52,16 +53,19 @@ workspace protocol.
 
 **Dependency direction, which is load-bearing:** `shared` depends on nothing. `kit-framework` depends
 on `shared`. `kits` depends on both. `db` depends on `kits` (it upgrades stored definitions on read).
-Nothing depends on an app. `apps/web` must never import `packages/kits` — a kit's code calls
-third-party APIs and has no business in a browser bundle, which is why the catalogue is served over
-HTTP instead.
+`kit-runtime` depends on `kits`, `kit-framework` and `shared`, and `api` and `worker` both import it
+— it is a package rather than part of the worker because the rule that kit code never runs in an
+app's main process does not soften because the caller is serving a request rather than a run.
+Nothing depends on an app. `apps/web` must never import `packages/kits` or `packages/kit-runtime` — a
+kit's code calls third-party APIs and has no business in a browser bundle, and the runtime that
+executes it even less so, which is why the catalogue is served over HTTP instead.
 
 ## Non-negotiable engineering rules
 
 These override convenience every time:
 
-1. **Never execute flow step code in the API or worker's main process.** It runs in the engine
-   subprocess (`apps/worker/src/engine/`), and the boundary is real: the child has no database
+1. **Never execute flow step code in the API or worker's main process.** It runs in the subprocess
+   `packages/kit-runtime` owns, and the boundary is real: the child has no database
    client, no secrets key, and an allowlisted `env`, so `DATABASE_URL` and `SECRETS_KEY` are not
    present to be read. It receives one step's input and one credential at a time.
 

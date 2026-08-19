@@ -20,6 +20,7 @@ COPY apps/worker/package.json ./apps/worker/
 COPY packages/auth/package.json ./packages/auth/
 COPY packages/db/package.json ./packages/db/
 COPY packages/kit-framework/package.json ./packages/kit-framework/
+COPY packages/kit-runtime/package.json ./packages/kit-runtime/
 COPY packages/kits/package.json ./packages/kits/
 COPY packages/shared/package.json ./packages/shared/
 RUN bun install --frozen-lockfile --filter "@automend/web"
@@ -29,8 +30,9 @@ FROM deps AS build
 # Each workspace's tsconfig.json extends the root one, so it has to be present to build.
 COPY tsconfig.base.json ./
 COPY packages/shared ./packages/shared
-# Types and the catalogue schema only. `packages/kits` is deliberately absent: a kit's code calls third-party APIs
-# and must never reach a browser bundle, which is why the builder reads the catalogue over HTTP instead.
+# Types and the catalogue schema only. `packages/kits` and `packages/kit-runtime` are deliberately absent: a kit's
+# code calls third-party APIs and must never reach a browser bundle, and the runtime that executes it even less so
+# — which is why the builder reads the catalogue over HTTP instead.
 COPY packages/kit-framework ./packages/kit-framework
 COPY apps/web ./apps/web
 WORKDIR /app/apps/web
@@ -45,6 +47,7 @@ COPY apps/worker/package.json ./apps/worker/
 COPY packages/auth/package.json ./packages/auth/
 COPY packages/db/package.json ./packages/db/
 COPY packages/kit-framework/package.json ./packages/kit-framework/
+COPY packages/kit-runtime/package.json ./packages/kit-runtime/
 COPY packages/kits/package.json ./packages/kits/
 COPY packages/shared/package.json ./packages/shared/
 RUN bun install --frozen-lockfile --production --filter "@automend/web"

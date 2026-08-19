@@ -21,27 +21,22 @@
  */
 
 import type { KitRateLimit } from "@automend/kit-framework";
-import { config } from "@automend/shared";
-import type { Logger } from "@automend/shared/logger";
-import { createLineReader, decodeMessage, encodeMessage } from "./channel";
 import {
+  CHILD_ENTRY,
+  createLineReader,
+  decodeMessage,
   type EngineCredential,
   type EngineLimits,
   type EngineMessage,
+  encodeMessage,
   engineMessageSchema,
   type RateLimitRequest,
   type StepResult,
-} from "./protocol";
-import type { RateLimiter } from "./rate-limiter";
+} from "@automend/kit-runtime";
+import { config } from "@automend/shared";
+import type { Logger } from "@automend/shared/logger";
 
-/**
- * Resolved from this module rather than assembled by a caller, so nothing can point it elsewhere.
- *
- * `Bun.fileURLToPath` rather than `.pathname`: on Windows a file URL's pathname is `/G:/…`, with a leading slash
- * that is not part of any real path — `bun run` then fails to find the entry, the child never starts, and the
- * parent waits out its step timeout with nothing on stdout to say why.
- */
-const CHILD_ENTRY = Bun.fileURLToPath(new URL("./child.ts", import.meta.url));
+import type { RateLimiter } from "./rate-limiter";
 
 export type RunContext = {
   id: string;

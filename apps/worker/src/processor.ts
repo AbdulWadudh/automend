@@ -18,6 +18,7 @@
  */
 
 import { findRunForExecution, finishFlowRun, nextAttemptForRun, startFlowRun } from "@automend/db";
+import { buildEngineLimits } from "@automend/kit-runtime";
 import {
   describeDefinitionIssues,
   findStepsMissingConnections,
@@ -34,7 +35,6 @@ import { type Job, UnrecoverableError } from "bullmq";
 import { resolveRunCredentials } from "./credentials";
 import type { WorkerDependencies } from "./dependencies";
 import { executeFlow } from "./engine/executor";
-import { buildEngineLimits } from "./engine/protocol";
 import { createRateLimiter } from "./engine/rate-limiter";
 import { createStepHost } from "./engine/step-host";
 

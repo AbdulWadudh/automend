@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { config } from "@automend/shared";
-import { buildEngineLimits } from "../../src/engine/protocol";
-import { checkAddress } from "../../src/engine/ssrf-guard";
+import { buildEngineLimits } from "../src/protocol";
+import { checkAddress } from "../src/ssrf-guard";
 
 /**
  * The highest-consequence logic in the worker.

@@ -91,6 +91,7 @@
         "@automend/auth": "workspace:*",
         "@automend/db": "workspace:*",
         "@automend/kit-framework": "workspace:*",
+        "@automend/kit-runtime": "workspace:*",
         "@automend/kits": "workspace:*",
         "@automend/shared": "workspace:*",
         "bullmq": "^5.63.0",
@@ -141,6 +142,19 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/kit-runtime": {
+      "name": "@automend/kit-runtime",
+      "version": "0.1.0",
+      "dependencies": {
+        "@automend/kit-framework": "workspace:*",
+        "@automend/kits": "workspace:*",
+        "@automend/shared": "workspace:*",
+        "zod": "^4.1.13",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/kits": {
       "name": "@automend/kits",
       "version": "0.1.0",
@@ -179,6 +193,8 @@
     "@automend/db": ["@automend/db@workspace:packages/db"],
 
     "@automend/kit-framework": ["@automend/kit-framework@workspace:packages/kit-framework"],
+
+    "@automend/kit-runtime": ["@automend/kit-runtime@workspace:packages/kit-runtime"],
 
     "@automend/kits": ["@automend/kits@workspace:packages/kits"],
 
