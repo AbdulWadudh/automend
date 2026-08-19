@@ -8,7 +8,7 @@ import {
   type TemplateVariable,
 } from "@automend/shared";
 import { Link } from "@tanstack/react-router";
-import { CheckIcon, CopyIcon, Trash2Icon } from "lucide-react";
+import { CheckIcon, CopyIcon, Trash2Icon, WebhookIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { IconAction } from "@/components/ui/icon-action";
@@ -286,6 +286,9 @@ export type NodeInspectorProps = {
   variables: TemplateVariable[];
   /** The webhook path as stored, so the builder can say whether the address is live yet. */
   savedWebhookPath: string | undefined;
+  /** Whether the test drawer is open, so the trigger's button says which way it will go. */
+  isTestingWebhook: boolean;
+  onTestWebhookChange: (open: boolean) => void;
   definition: FlowDefinition;
   selectedNodeId: string | undefined;
   /** Undefined while it is still loading, so the panel can say so rather than rendering an empty form. */
@@ -331,6 +334,8 @@ export function NodeInspector({
   flowId,
   variables,
   savedWebhookPath,
+  isTestingWebhook,
+  onTestWebhookChange,
   definition,
   selectedNodeId,
   catalogue,
@@ -436,8 +441,10 @@ export function NodeInspector({
             connections={connections}
             definition={definition}
             savedWebhookPath={savedWebhookPath}
+            isTestingWebhook={isTestingWebhook}
             variables={variables}
             onChange={onChange}
+            onTestWebhookChange={onTestWebhookChange}
           />
         ) : (
           step && (
@@ -480,16 +487,20 @@ function TriggerSection({
   connections,
   definition,
   savedWebhookPath,
+  isTestingWebhook,
   variables,
   onChange,
+  onTestWebhookChange,
 }: {
   flowId: string;
   catalogue: KitCatalogue;
   connections: readonly Connection[];
   definition: FlowDefinition;
   savedWebhookPath: string | undefined;
+  isTestingWebhook: boolean;
   variables: TemplateVariable[];
   onChange: (definition: FlowDefinition) => void;
+  onTestWebhookChange: (open: boolean) => void;
 }) {
   const { trigger } = definition;
   const choices = listTriggerChoices(catalogue);
@@ -557,12 +568,27 @@ function TriggerSection({
         </>
       )}
 
+      {/* Testing the hook belongs with the hook. In the toolbar it was a control for the whole flow that only
+          ever applied to one node, and it appeared and vanished as the trigger changed under it. */}
       {summary?.strategy === "webhook" && (
-        <WebhookUrl
-          flowId={flowId}
-          path={path ?? ""}
-          isLive={savedWebhookPath !== undefined && savedWebhookPath === path}
-        />
+        <div className="space-y-3">
+          <WebhookUrl
+            flowId={flowId}
+            path={path ?? ""}
+            isLive={savedWebhookPath !== undefined && savedWebhookPath === path}
+          />
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            aria-expanded={isTestingWebhook}
+            onClick={() => onTestWebhookChange(!isTestingWebhook)}
+          >
+            <WebhookIcon data-icon="inline-start" />
+            {isTestingWebhook ? "Hide test" : "Test webhook"}
+          </Button>
+        </div>
       )}
     </>
   );
