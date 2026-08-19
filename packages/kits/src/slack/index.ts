@@ -15,7 +15,12 @@ export const slackKit = createKit({
   description: "Post messages to a connected Slack workspace.",
   auth: kitOAuth({
     connectorId: "slack",
-    scopes: ["chat:write"],
+    /**
+     * The read scopes are the channel picker's, not an action's. Declared here anyway so
+     * `tests/registry.test.ts` holds the connector to requesting them — a picker that fails with
+     * `missing_scope` is as broken as a step that does.
+     */
+    scopes: ["chat:write", "chat:write.public", "channels:read", "groups:read"],
   }),
   /**
    * Slack asks apps to post no more than one message a second per channel, and bursts briefly. The

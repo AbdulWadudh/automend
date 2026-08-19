@@ -563,6 +563,13 @@ function TriggerSection({
             idPrefix="trigger"
             input={trigger.input}
             variables={variables}
+            optionsSource={{
+              kitId: trigger.kitId,
+              target: "trigger",
+              targetName: trigger.triggerName,
+              connectionId: trigger.connectionId,
+              input: trigger.input,
+            }}
             onChange={(name, value) => onChange(setTriggerInput(definition, name, value))}
           />
         </>
@@ -664,6 +671,13 @@ function StepSection({
             idPrefix={`step-${step.id}`}
             input={step.input}
             variables={variables}
+            optionsSource={{
+              kitId: step.kitId,
+              target: "action",
+              targetName: step.actionName,
+              connectionId: step.connectionId,
+              input: step.input,
+            }}
             onChange={(name, value) => onChange(setStepInput(definition, step.id, name, value))}
           />
 

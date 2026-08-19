@@ -1,6 +1,7 @@
 import { createAction, Property, requireOAuthToken } from "@automend/kit-framework";
 import { config } from "@automend/shared";
 import { assertSlackOk, bearer, parseSlack, postedMessageSchema, slackUrls } from "../common/api";
+import { loadChannelOptions } from "../common/channels";
 
 const { validation } = config;
 
@@ -16,15 +17,17 @@ export const slackSendMessageAction = createAction({
   displayName: "Send message",
   description: "Post a message to a channel in the connected Slack workspace.",
   props: {
-    channel: Property.shortText({
+    channel: Property.dynamicDropdown({
       displayName: "Channel",
-      description: "A channel id like C0123ABCDEF, or a name like #general. Supports variables.",
+      description: "Channels this workspace's Automend app can see. Invite it to a private channel to list it.",
       required: true,
+      loadOptions: loadChannelOptions,
       maxLength: validation.slackChannel.maxLength,
     }),
     text: Property.longText({
       displayName: "Message",
-      description: "Slack's mrkdwn is supported. Also the fallback shown in notifications.",
+      description:
+        "Slack mrkdwn: *bold*, _italic_, ~strike~, `code`, <https://example.com|a link>, <@U0123ABCD> and <#C0123ABCD>.",
       required: true,
       maxLength: validation.slackMessage.maxLength,
     }),

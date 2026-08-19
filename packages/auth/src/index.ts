@@ -9,6 +9,7 @@ export type { Auth, CreateAuthOptions, SocialProviderCredentials } from "./auth"
 export { createAuth } from "./auth";
 export type { ConnectorCredentialMap, ConnectorCredentials } from "./connectors";
 export { listAvailableConnectors, toConnectionProviderId, toConnectorId } from "./connectors";
+export { resolveConnectionCredential } from "./credentials";
 export { authSchemaOptions } from "./options";
 export type { AuthenticatedRequestContext } from "./session";
 export { resolveRequestContext } from "./session";

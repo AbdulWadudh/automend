@@ -8,20 +8,12 @@
  */
 
 import { stepExecutionError } from "@automend/shared";
+import type { KitCredential } from "./credential";
 import type { HttpClient, KitLogger } from "./http";
 import type { InputPropertyMap, ResolvedInput } from "./property";
 import type { KitStore } from "./store";
 
-/**
- * The credential a kit acts with, already resolved by the parent process.
- *
- * An OAuth connection arrives as an access token rather than as a refresh token and a client secret:
- * refreshing happens in the worker, where the secrets key lives, so the subprocess never holds
- * anything reusable beyond this run.
- */
-export type KitCredential =
-  | { readonly kind: "oauth"; readonly connectorId: string; readonly accessToken: string }
-  | { readonly kind: "token"; readonly connectorId: string; readonly token: string };
+export type { KitCredential };
 
 export type RunContext = {
   readonly id: string;

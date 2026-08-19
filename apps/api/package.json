@@ -13,6 +13,7 @@
     "@automend/auth": "workspace:*",
     "@automend/db": "workspace:*",
     "@automend/kit-framework": "workspace:*",
+    "@automend/kit-runtime": "workspace:*",
     "@automend/kits": "workspace:*",
     "@automend/shared": "workspace:*",
     "@bull-board/api": "9.2.0",

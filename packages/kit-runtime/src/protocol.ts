@@ -90,13 +90,36 @@ export const rateLimitGrantSchema = z.object({
   message: z.string().nullable(),
 });
 
+/**
+ * List a dynamic dropdown's choices. One shot, and self-contained.
+ *
+ * It carries its own limits rather than relying on a preceding `hello`, because there is no run to
+ * introduce: the api spawns a child, asks this, reads the answer and closes the pipe. A loader gets
+ * no run context for the same reason — listing what a service holds is not part of any execution.
+ */
+export const loadOptionsCommandSchema = z.object({
+  type: z.literal("loadOptions"),
+  commandId: z.string(),
+  limits: engineLimitsSchema,
+  kitId: z.string(),
+  /** A property map belongs to one or the other, and the same property name may exist in both. */
+  target: z.enum(["action", "trigger"]),
+  targetName: z.string(),
+  propertyName: z.string(),
+  /** What the author has configured so far, for a dropdown that narrows another. */
+  input: z.record(z.string(), z.unknown()),
+  credential: engineCredentialSchema.nullable(),
+});
+
 export const engineCommandSchema = z.discriminatedUnion("type", [
   engineHelloSchema,
   runStepCommandSchema,
   rateLimitGrantSchema,
+  loadOptionsCommandSchema,
 ]);
 
 export type EngineHello = z.infer<typeof engineHelloSchema>;
+export type LoadOptionsCommand = z.infer<typeof loadOptionsCommandSchema>;
 export type RunStepCommand = z.infer<typeof runStepCommandSchema>;
 export type RateLimitGrant = z.infer<typeof rateLimitGrantSchema>;
 export type EngineCommand = z.infer<typeof engineCommandSchema>;
@@ -139,14 +162,34 @@ export const rateLimitRequestSchema = z.object({
   commandId: z.string(),
 });
 
+/**
+ * The choices, or why there are none.
+ *
+ * Capped at `config.kits.maxDynamicOptions` on the way out of the child rather than trusted: this
+ * array crosses a pipe the parent reads into memory, so a workspace with tens of thousands of
+ * channels would otherwise be a way to exhaust it.
+ */
+export const optionsResultSchema = z.object({
+  type: z.literal("optionsResult"),
+  commandId: z.string(),
+  outcome: z.enum(["succeeded", "failed"]),
+  options: z
+    .array(z.object({ label: z.string(), value: z.string(), description: z.string().optional() }))
+    .max(config.kits.maxDynamicOptions),
+  error: z.object({ code: z.string(), message: z.string() }).nullable(),
+});
+
 export const engineMessageSchema = z.discriminatedUnion("type", [
   engineLogSchema,
   stepResultSchema,
   rateLimitRequestSchema,
+  optionsResultSchema,
 ]);
 
 export type EngineLog = z.infer<typeof engineLogSchema>;
 export type StepResult = z.infer<typeof stepResultSchema>;
+export type OptionsResult = z.infer<typeof optionsResultSchema>;
+export type DropdownChoice = OptionsResult["options"][number];
 export type RateLimitRequest = z.infer<typeof rateLimitRequestSchema>;
 export type EngineMessage = z.infer<typeof engineMessageSchema>;
 

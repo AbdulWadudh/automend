@@ -37,9 +37,12 @@ export { createKit, KIT_NAME_PATTERN, kitOAuth, kitRateLimit, kitToken } from ".
 export type {
   CheckboxProperty,
   DropdownOption,
+  DynamicDropdownProperty,
   InputProperty,
   InputPropertyMap,
   JsonProperty,
+  LoadOptions,
+  LoadOptionsContext,
   LongTextProperty,
   NumberProperty,
   PropertyType,

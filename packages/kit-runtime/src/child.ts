@@ -20,8 +20,8 @@
  */
 
 import type { KitCredential, KitLogger, KitStore } from "@automend/kit-framework";
-import { findAction } from "@automend/kits";
-import { API_ERROR_CODES, isAutomendError } from "@automend/shared";
+import { findAction, findTrigger } from "@automend/kits";
+import { API_ERROR_CODES, config, isAutomendError } from "@automend/shared";
 import { createLineReader, decodeMessage, encodeMessage } from "./channel";
 import { createGuardedHttpClient } from "./http-client";
 import {
@@ -29,6 +29,7 @@ import {
   type EngineLog,
   type EngineMessage,
   engineCommandSchema,
+  type LoadOptionsCommand,
   type RateLimitGrant,
   type RunStepCommand,
 } from "./protocol";
@@ -181,6 +182,67 @@ async function runStep(command: RunStepCommand, current: ChildState): Promise<vo
 }
 
 /**
+ * Lists a dynamic dropdown's choices, in the same process a step would run in.
+ *
+ * The loader is kit code and reaches the network the same guarded way, with the same one credential.
+ * What it does not get is a run, a store or a rate-limit token — there is no run to belong to, and a
+ * builder waiting on a dropdown is not something to queue behind a flow's quota.
+ */
+async function loadOptions(command: LoadOptionsCommand): Promise<void> {
+  const target =
+    command.target === "action"
+      ? findAction(command.kitId, command.targetName)
+      : findTrigger(command.kitId, command.targetName);
+  const property = target?.props[command.propertyName];
+
+  if (!property || property.type !== "dynamicDropdown") {
+    send({
+      type: "optionsResult",
+      commandId: command.commandId,
+      outcome: "failed",
+      options: [],
+      // The api resolves the property before asking, so reaching this means the two processes are
+      // running different builds — worth saying rather than reporting as a kit failure.
+      error: {
+        code: API_ERROR_CODES.FLOW_VALIDATION_FAILED,
+        message: `${command.kitId}.${command.targetName} has no dynamic dropdown called ${command.propertyName}`,
+      },
+    });
+
+    return;
+  }
+
+  try {
+    const options = await property.loadOptions({
+      auth: (command.credential ?? undefined) as KitCredential | undefined,
+      http: createGuardedHttpClient(command.limits),
+      logger: createLogger(command.propertyName),
+      input: command.input,
+    });
+
+    send({
+      type: "optionsResult",
+      commandId: command.commandId,
+      outcome: "succeeded",
+      // Truncated rather than refused: a partial list an author can search is more use than an error
+      // saying their workspace is too big. The cap is the protocol's, so a kit cannot raise it.
+      options: options
+        .slice(0, config.kits.maxDynamicOptions)
+        .map(({ label, value, description }) => ({ label, value, description })),
+      error: null,
+    });
+  } catch (error) {
+    send({
+      type: "optionsResult",
+      commandId: command.commandId,
+      outcome: "failed",
+      options: [],
+      error: describeError(error),
+    });
+  }
+}
+
+/**
  * Every command is parsed before it is acted on.
  *
  * The channel is a process boundary like any other, so what arrives over it is untrusted input. A malformed one is
@@ -210,6 +272,14 @@ function handleCommand(raw: unknown): void {
 
     pendingTokens.delete(command.requestId);
     settle?.(command);
+
+    return;
+  }
+
+  if (command.type === "loadOptions") {
+    // Before the `state` guard below on purpose: a one-shot options load introduces no run, so
+    // requiring a `hello` first would be a ceremony with nothing behind it.
+    void loadOptions(command);
 
     return;
   }

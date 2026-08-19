@@ -1,4 +1,11 @@
-import type { HttpRequest, HttpResponse, KitCredential, KitInvocation, KitStore } from "@automend/kit-framework";
+import type {
+  HttpRequest,
+  HttpResponse,
+  KitCredential,
+  KitInvocation,
+  KitStore,
+  LoadOptionsContext,
+} from "@automend/kit-framework";
 
 /**
  * A kit invocation built from nothing, so a kit can be exercised without a subprocess, a database or a
@@ -93,6 +100,30 @@ export function createFakeContext(overrides: FakeContextOverrides = {}): KitInvo
       idempotencyKey: "run-key",
     },
     step: { name: overrides.stepName ?? "Step under test" },
+    logger: {
+      info: (message) => logged.push(message),
+      warn: (message) => logged.push(message),
+      error: (message) => logged.push(message),
+    },
+  };
+}
+
+/**
+ * What an option loader is given. Narrower than a step's context on purpose — there is no run here,
+ * so a loader reaching for one should not typecheck.
+ */
+export function createFakeOptionsContext(overrides: {
+  http: FakeHttp;
+  auth?: KitCredential;
+  input?: Record<string, unknown>;
+  logged?: string[];
+}): LoadOptionsContext {
+  const logged = overrides.logged ?? [];
+
+  return {
+    auth: overrides.auth,
+    http: overrides.http,
+    input: overrides.input ?? {},
     logger: {
       info: (message) => logged.push(message),
       warn: (message) => logged.push(message),

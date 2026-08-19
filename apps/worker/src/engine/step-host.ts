@@ -22,6 +22,7 @@
 
 import type { KitRateLimit } from "@automend/kit-framework";
 import {
+  buildChildEnv,
   CHILD_ENTRY,
   createLineReader,
   decodeMessage,
@@ -65,28 +66,6 @@ export type StepHost = {
   close: () => Promise<void>;
 };
 
-/**
- * The child inherits almost nothing.
- *
- * Listing what to keep rather than what to remove is the only version of this that stays correct: a variable
- * added to the deployment tomorrow is absent by default instead of leaking because nobody updated a denylist.
- * `DATABASE_URL`, `REDIS_URL` and `SECRETS_KEY` are therefore not merely unused in the child — they are not
- * present to be read.
- */
-function buildChildEnv(): Record<string, string> {
-  const kept: Record<string, string> = {};
-
-  for (const name of ["NODE_ENV", "TZ", "PATH", "SYSTEMROOT", "HOME"]) {
-    const value = process.env[name];
-
-    if (value !== undefined) {
-      kept[name] = value;
-    }
-  }
-
-  return kept;
-}
-
 export type CreateStepHostOptions = {
   run: RunContext;
   limits: EngineLimits;
@@ -126,6 +105,14 @@ export function createStepHost({ run, limits, logger, limiter }: CreateStepHostO
         { runId: run.id, flowId: run.flowId, tenantId: run.tenantId, step: message.stepName, ...message.fields },
         message.message,
       );
+
+      return;
+    }
+
+    if (message.type === "optionsResult") {
+      // This host never asks for options — that is the api's one-shot host. A child answering one here
+      // is a bug worth naming rather than a step result to mis-record.
+      logger.warn({ runId: run.id, commandId: message.commandId }, "engine answered with options nobody asked for");
 
       return;
     }

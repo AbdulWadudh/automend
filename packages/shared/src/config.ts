@@ -489,10 +489,14 @@ export const config = {
          * `chat:write.public` is what lets the app post to a public channel it was never invited
          * to; without it every target channel needs a manual `/invite` first.
          *
-         * Nothing broader, even though widening later forces every workspace to re-authorise: a
-         * scope no action uses is one nobody can point at a step to justify.
+         * `channels:read` and `groups:read` are what `conversations.list` needs, which is what the
+         * channel picker in the builder calls — without them Slack answers `missing_scope` and the
+         * author is left typing an id they have to go and find.
+         *
+         * Nothing broader: a scope no action or picker uses is one nobody can point at a step to
+         * justify, and widening this forces every workspace to re-authorise.
          */
-        scopes: ["chat:write", "chat:write.public"],
+        scopes: ["chat:write", "chat:write.public", "channels:read", "groups:read", "channels:history"],
         /**
          * User scopes, sent as `user_scope` and used for nothing but identity.
          *
@@ -722,7 +726,14 @@ export const config = {
      * and a control in the builder's inspector, so the list is short on purpose — a kit that wants
      * a richer field composes these rather than adding a seventh.
      */
-    propertyTypes: ["shortText", "longText", "number", "checkbox", "staticDropdown", "json"],
+    propertyTypes: ["shortText", "longText", "number", "checkbox", "staticDropdown", "dynamicDropdown", "json"],
+    /**
+     * How many choices a dynamic dropdown may return. A kit paginates up to this and stops.
+     *
+     * A cap rather than trust: the list crosses a pipe the parent reads into memory, so a workspace
+     * with tens of thousands of channels would otherwise be a way to exhaust it.
+     */
+    maxDynamicOptions: 1_000,
     /** How a trigger learns that something happened. */
     triggerStrategies: TRIGGER_STRATEGIES,
     /**

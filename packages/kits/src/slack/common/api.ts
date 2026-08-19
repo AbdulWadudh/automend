@@ -14,6 +14,7 @@ const BASE_URL = "https://slack.com/api";
 
 export const slackUrls = {
   postMessage: `${BASE_URL}/chat.postMessage`,
+  listConversations: `${BASE_URL}/conversations.list`,
 } as const;
 
 export function bearer(accessToken: string): Record<string, string> {
@@ -56,6 +57,18 @@ export function parseSlack<Schema extends z.ZodType>(schema: Schema, body: unkno
 
   return result.data;
 }
+
+export const conversationListSchema = z.object({
+  channels: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string().optional(),
+      is_private: z.boolean().optional(),
+    }),
+  ),
+  /** Slack sends an empty string, not an absent field, on the last page. */
+  response_metadata: z.object({ next_cursor: z.string().optional() }).optional(),
+});
 
 export const postedMessageSchema = z.object({
   channel: z.string(),

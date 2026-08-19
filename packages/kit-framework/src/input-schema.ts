@@ -89,6 +89,10 @@ function storedPropertySchema(property: InputProperty): z.ZodType {
       return z.boolean();
     case "staticDropdown":
       return dropdownSchema(property.options);
+    // No membership check: the options came from the service when the step was configured, and this
+    // may be validating a definition saved when that list held something it no longer does.
+    case "dynamicDropdown":
+      return boundedText(property.maxLength);
   }
 }
 
@@ -117,6 +121,8 @@ function resolvedPropertySchema(property: InputProperty): z.ZodType {
       return z.boolean();
     case "staticDropdown":
       return dropdownSchema(property.options);
+    case "dynamicDropdown":
+      return z.string();
     case "json":
       return jsonTextSchema;
   }

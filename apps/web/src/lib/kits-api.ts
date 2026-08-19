@@ -16,7 +16,12 @@ import {
   type KitProperty,
   kitCatalogueSchema,
 } from "@automend/kit-framework";
-import type { Connection } from "@automend/shared";
+import {
+  type Connection,
+  type LoadPropertyOptionsRequest,
+  type PropertyOptionsResponse,
+  propertyOptionsResponseSchema,
+} from "@automend/shared";
 import { requestApi } from "./api";
 
 const KITS_PATH = "/kits";
@@ -24,7 +29,35 @@ const KITS_PATH = "/kits";
 export const kitQueryKeys = {
   all: ["kits"] as const,
   catalogue: () => [...kitQueryKeys.all, "catalogue"] as const,
+  /**
+   * Keyed by the connection and by the inputs the loader reads, so switching account or changing what
+   * a dropdown depends on fetches again rather than showing the previous workspace's answer.
+   */
+  options: (request: LoadPropertyOptionsRequest) =>
+    [
+      ...kitQueryKeys.all,
+      "options",
+      request.kitId,
+      request.target,
+      request.targetName,
+      request.propertyName,
+      request.connectionId,
+      request.input,
+    ] as const,
 };
+
+export async function loadPropertyOptions(
+  request: LoadPropertyOptionsRequest,
+  signal?: AbortSignal,
+): Promise<PropertyOptionsResponse> {
+  return await requestApi({
+    path: `${KITS_PATH}/options`,
+    method: "POST",
+    body: request,
+    schema: propertyOptionsResponseSchema,
+    signal,
+  });
+}
 
 export async function fetchKitCatalogue(signal?: AbortSignal): Promise<KitCatalogue> {
   return await requestApi({ path: KITS_PATH, schema: kitCatalogueSchema, signal });

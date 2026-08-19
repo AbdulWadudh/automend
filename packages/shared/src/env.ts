@@ -135,6 +135,14 @@ function optionalUrlSchema(variableName: string, allowedSchemes: readonly string
 const apiEnvSchema = baseEnvSchema.extend({
   DATABASE_URL: databaseUrlSchema,
   REDIS_URL: redisUrlSchema,
+  /**
+   * The api reads this too, and it must be the same value the worker has.
+   *
+   * Loading a dynamic dropdown's options is a kit calling a service through the same guarded client a
+   * step uses, so the address rules have to be the deployment's rather than a second, looser set that
+   * happens to live in the api. See the worker's entry below for why it is off by default.
+   */
+  ENGINE_ALLOW_PRIVATE_NETWORK: booleanSchema.default(config.engine.http.allowPrivateNetworkByDefault),
   API_PORT: portSchema.default(config.services.api.defaultPort),
   WEB_ORIGIN: originListSchema,
   AUTH_SECRET: z

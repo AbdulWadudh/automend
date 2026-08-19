@@ -31,6 +31,8 @@ export type ApiDependencies = {
   availableConnectors: string[];
   /** Encrypts connector secrets. Held as bytes so the key is parsed and checked exactly once. */
   secretsKey: Buffer;
+  /** Passed to the options subprocess, so a self-hosted service on a private address is reachable. */
+  allowPrivateNetwork: boolean;
   /**
    * Checks the operator password and issues the grant the queue dashboard looks for, or `undefined`
    * when this deployment configured no operator credentials.
@@ -217,6 +219,7 @@ export function createApiDependencies(): ApiDependencies {
     enabledSocialProviders: google ? [config.auth.socialProviders.google.id] : [],
     availableConnectors,
     secretsKey,
+    allowPrivateNetwork: env.ENGINE_ALLOW_PRIVATE_NETWORK,
     opsSession: createOperatorSession(logger),
     studioUrl: env.STUDIO_URL,
     findLinkedAccount: (userId, providerId) => findLinkedAccountForUser(database.db, userId, providerId),

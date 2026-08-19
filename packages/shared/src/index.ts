@@ -12,6 +12,7 @@ export * from "./errors";
 export * from "./flow-definition";
 export * from "./flows";
 export * from "./health";
+export * from "./kits";
 export * from "./operations";
 export * from "./queue";
 export * from "./rich-text";

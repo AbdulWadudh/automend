@@ -150,6 +150,8 @@ const sections: EnvSection[] = [
         "ENGINE_ALLOW_PRIVATE_NETWORK",
         String(config.engine.http.allowPrivateNetworkByDefault),
         [
+          "Read by the worker AND the api, which must agree: the api applies it when a builder loads a",
+          "dynamic dropdown's options, which is a kit calling a service the same guarded way a step does.",
           "Lets flows call private, loopback and internal addresses. An HTTP step's URL can come from a",
           "flow's DATA, so with this on whoever sends a webhook chooses where the worker connects — reaching",
           "Postgres, Redis or anything else on the network. Turn it on only to automate against a service on",

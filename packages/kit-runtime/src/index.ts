@@ -14,6 +14,8 @@
 
 export { createLineReader, decodeMessage, encodeMessage } from "./channel";
 export { CHILD_ENTRY } from "./child-entry";
+export { buildChildEnv } from "./child-env";
 export { createGuardedHttpClient } from "./http-client";
+export { type LoadOptionsRequest, loadDynamicOptions } from "./options-host";
 export * from "./protocol";
 export { checkAddress } from "./ssrf-guard";

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@automend/db": "workspace:*",
+    "@automend/kit-framework": "workspace:*",
     "@automend/shared": "workspace:*",
     "better-auth": "^1.6.29",
     "zod": "^4.1.13",
