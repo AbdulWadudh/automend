@@ -474,7 +474,7 @@ function ConnectionsPage() {
     catalogue.data?.find((connector) => connector.id === providerId)?.label ?? providerId;
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-8 px-6 py-10">
+    <div className="animate-in fade-in duration-200 mx-auto w-full max-w-4xl flex-1 space-y-8 overflow-y-auto px-6 py-10">
       <div className="space-y-1">
         <h1 className="font-semibold text-2xl tracking-tight">Connections</h1>
         <p className="text-muted-foreground">
