@@ -36,8 +36,22 @@ export const kitPropertySchema = z.object({
   maxLength: z.number().optional(),
   minimum: z.number().optional(),
   maximum: z.number().optional(),
-  /** Present only for `staticDropdown`. */
-  options: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
+  /** Present only for `staticDropdown`. A dynamic one's choices are fetched, not described here. */
+  options: z.array(z.object({ label: z.string(), value: z.string(), description: z.string().optional() })).optional(),
+  /**
+   * Present only for `longText`: whether the field offers formatting and therefore stores HTML.
+   *
+   * Carried across because the difference is not presentational — a rich field's value is markup, and
+   * a kit sending it somewhere that expects plain text gets markup.
+   */
+  rich: z.boolean().optional(),
+  /**
+   * Present only for `dynamicDropdown`: the properties its loader reads.
+   *
+   * The builder refetches when one of them changes, and offers nothing until each has a value — a
+   * loader asked for "the tabs in spreadsheet undefined" would answer with an error rather than a list.
+   */
+  dependsOn: z.array(z.string()).optional(),
 });
 
 export type KitProperty = z.infer<typeof kitPropertySchema>;
@@ -109,6 +123,8 @@ function describeProperties(props: InputPropertyMap): KitProperty[] {
     minimum: property.type === "number" ? property.minimum : undefined,
     maximum: property.type === "number" ? property.maximum : undefined,
     options: property.type === "staticDropdown" ? property.options.map((option) => ({ ...option })) : undefined,
+    rich: property.type === "longText" ? property.rich : undefined,
+    dependsOn: property.type === "dynamicDropdown" ? [...property.dependsOn] : undefined,
   }));
 }
 

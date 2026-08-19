@@ -34,6 +34,9 @@ export const gmailSendEmailAction = createAction({
     body: Property.longText({
       displayName: "Body",
       required: true,
+      // The one field in the catalogue that is genuinely markup: `bodyType` below sends it as HTML,
+      // and `toEmailSafeHtml` inlines the editor's classes on the way out.
+      rich: true,
       maxLength: validation.emailBody.maxLength,
     }),
     bodyType: Property.staticDropdown({

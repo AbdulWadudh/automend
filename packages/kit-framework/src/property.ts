@@ -11,6 +11,8 @@
  */
 
 import { config } from "@automend/shared";
+import type { KitCredential } from "./credential";
+import type { HttpClient, KitLogger } from "./http";
 
 export type PropertyType = (typeof config.kits.propertyTypes)[number];
 
@@ -31,6 +33,8 @@ const TEMPLATABLE_BY_TYPE: Readonly<Record<PropertyType, boolean>> = {
   json: true,
   checkbox: false,
   staticDropdown: false,
+  // Its value has to be one of the options the service returned, which a template cannot promise.
+  dynamicDropdown: false,
 };
 
 /**
@@ -48,6 +52,9 @@ const MAX_LENGTH_BY_TYPE: Readonly<Record<PropertyType, number | undefined>> = {
   json: config.kits.textMaxLength.long,
   checkbox: undefined,
   staticDropdown: undefined,
+  // Unlike a static dropdown's, this value cannot be checked against a list nobody has fetched, so
+  // the one thing that can be bounded at rest is its length.
+  dynamicDropdown: config.kits.textMaxLength.short,
 };
 
 type PropertyShape<Type extends PropertyType, Required extends boolean, Value> = {
@@ -70,7 +77,17 @@ type PropertyShape<Type extends PropertyType, Required extends boolean, Value> =
 };
 
 export type ShortTextProperty<Required extends boolean = boolean> = PropertyShape<"shortText", Required, string>;
-export type LongTextProperty<Required extends boolean = boolean> = PropertyShape<"longText", Required, string>;
+/**
+ * Several lines of text.
+ *
+ * `rich` decides whether the builder offers formatting, and it is not cosmetic: a rich field stores
+ * *HTML*. That suits an email body and ruins everything else — a JSON request body, a log line, or
+ * Slack's mrkdwn would each be sent with `<p>` wrapped round it. So it is opt-in, and a kit that
+ * wants formatting says so.
+ */
+export type LongTextProperty<Required extends boolean = boolean> = PropertyShape<"longText", Required, string> & {
+  readonly rich: boolean;
+};
 export type NumberProperty<Required extends boolean = boolean> = PropertyShape<"number", Required, number> & {
   /**
    * Checked when the value is resolved, not when it is stored — a field holding `{{delayMs}}` is text
@@ -92,6 +109,13 @@ export type JsonProperty<Required extends boolean = boolean> = PropertyShape<"js
 export type DropdownOption<Value extends string> = {
   readonly label: string;
   readonly value: Value;
+  /**
+   * A qualifier shown beside the label — "private", "archived", the sheet's owner.
+   *
+   * Separate from the label rather than folded into it so the builder can style it as secondary and
+   * still search it, and so an option is never distinguished by an icon or a colour alone.
+   */
+  readonly description?: string;
 };
 
 export type StaticDropdownProperty<Value extends string = string, Required extends boolean = boolean> = PropertyShape<
@@ -102,13 +126,52 @@ export type StaticDropdownProperty<Value extends string = string, Required exten
   readonly options: readonly DropdownOption<Value>[];
 };
 
+/**
+ * What an option loader is given.
+ *
+ * Deliberately narrower than a step's context: there is no run, no store and no idempotency key,
+ * because listing what a service holds is not part of any run. It gets the same guarded HTTP client
+ * and the same one credential, and it runs in the same subprocess — the rule about where kit code
+ * executes does not soften because the caller is a builder rather than an engine.
+ */
+export type LoadOptionsContext = {
+  readonly auth: KitCredential | undefined;
+  readonly http: HttpClient;
+  readonly logger: KitLogger;
+  /** What the author has configured on this step so far, for a dropdown that narrows another. */
+  readonly input: Record<string, unknown>;
+};
+
+export type LoadOptions = (context: LoadOptionsContext) => Promise<readonly DropdownOption<string>[]>;
+
+/**
+ * Choices fetched from the service — a Slack channel, a spreadsheet tab.
+ *
+ * The value narrows no further than `string`: what the options are is not known when the kit is
+ * written, so neither the stored schema nor the resolved one can check membership. That is honest
+ * rather than lax — the alternative is a check that pretends to know a list it has never seen.
+ */
+export type DynamicDropdownProperty<Required extends boolean = boolean> = PropertyShape<
+  "dynamicDropdown",
+  Required,
+  string
+> & {
+  readonly loadOptions: LoadOptions;
+  /**
+   * Properties whose values the loader reads. The builder refetches when one of them changes, and
+   * offers nothing until every one of them has a value.
+   */
+  readonly dependsOn: readonly string[];
+};
+
 export type InputProperty =
   | ShortTextProperty
   | LongTextProperty
   | NumberProperty
   | CheckboxProperty
   | JsonProperty
-  | StaticDropdownProperty;
+  | StaticDropdownProperty
+  | DynamicDropdownProperty;
 
 /** What an action or trigger declares: a name for each field, and the field's description. */
 export type InputPropertyMap = Readonly<Record<string, InputProperty>>;
@@ -122,7 +185,7 @@ export type InputPropertyMap = Readonly<Record<string, InputProperty>>;
 export type PropertyValue<Property extends InputProperty> =
   Property extends StaticDropdownProperty<infer Value, boolean>
     ? Value
-    : Property extends { readonly type: "shortText" | "longText" }
+    : Property extends { readonly type: "shortText" | "longText" | "dynamicDropdown" }
       ? string
       : Property extends { readonly type: "number" }
         ? number
@@ -198,8 +261,10 @@ export const Property = {
   },
 
   /** Several lines — an email body, a message, a note. */
-  longText<const Required extends boolean = false>(spec: PropertySpec<string, Required>): LongTextProperty<Required> {
-    return build("longText", spec);
+  longText<const Required extends boolean = false>(
+    spec: PropertySpec<string, Required> & { rich?: boolean },
+  ): LongTextProperty<Required> {
+    return { ...build("longText", spec), rich: spec.rich ?? false };
   },
 
   number<const Required extends boolean = false>(
@@ -219,18 +284,29 @@ export const Property = {
     return build("json", spec);
   },
 
-  /**
-   * A fixed set of choices, known when the kit is written.
-   *
-   * Choices that have to be fetched from the service — a Slack channel, a spreadsheet tab — are a
-   * dynamic dropdown, which does not exist yet.
-   */
+  /** A fixed set of choices, known when the kit is written. */
   staticDropdown<const Value extends string, const Required extends boolean = false>(
     spec: PropertySpec<Value, Required> & { options: readonly DropdownOption<Value>[] },
   ): StaticDropdownProperty<Value, Required> {
     return {
       ...build("staticDropdown", spec),
       options: spec.options,
+    };
+  },
+
+  /**
+   * Choices fetched from the service the connection points at.
+   *
+   * `loadOptions` is kit code and runs where all kit code runs — the subprocess, with the step's
+   * credential and the guarded client, never in the api that asked for it.
+   */
+  dynamicDropdown<const Required extends boolean = false>(
+    spec: PropertySpec<string, Required> & { loadOptions: LoadOptions; dependsOn?: readonly string[] },
+  ): DynamicDropdownProperty<Required> {
+    return {
+      ...build("dynamicDropdown", spec),
+      loadOptions: spec.loadOptions,
+      dependsOn: spec.dependsOn ?? [],
     };
   },
 } as const;

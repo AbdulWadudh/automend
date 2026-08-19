@@ -21,6 +21,7 @@ import type { KitProperty } from "@automend/kit-framework";
 import type { TemplateVariable } from "@automend/shared";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DynamicDropdownField, type OptionsSource } from "./dynamic-dropdown-field";
 import { TemplateField } from "./template-field/template-field";
 
 export type PropertyFieldProps = {
@@ -32,6 +33,8 @@ export type PropertyFieldProps = {
   variables: TemplateVariable[];
   /** Set when the value fails the kit's own schema, so it can be shown against the field. */
   error?: string;
+  /** Where a dynamic dropdown fetches its choices. Absent for a property map that has none. */
+  optionsSource?: OptionsSource;
   onChange: (value: unknown) => void;
 };
 
@@ -90,7 +93,15 @@ function describeRange(property: KitProperty): string | undefined {
   return minimum === undefined ? undefined : `At least ${minimum.toLocaleString()}.`;
 }
 
-export function PropertyField({ property, idPrefix, value, variables, error, onChange }: PropertyFieldProps) {
+export function PropertyField({
+  property,
+  idPrefix,
+  value,
+  variables,
+  error,
+  optionsSource,
+  onChange,
+}: PropertyFieldProps) {
   const fieldId = `${idPrefix}-${property.name}`;
   const hintId = `${fieldId}-hint`;
   const errorId = `${fieldId}-error`;
@@ -121,6 +132,7 @@ export function PropertyField({ property, idPrefix, value, variables, error, onC
         invalid={error !== undefined}
         value={value}
         variables={variables}
+        optionsSource={optionsSource}
         onChange={onChange}
       />
 
@@ -147,10 +159,20 @@ type ControlProps = {
   invalid: boolean;
   value: unknown;
   variables: TemplateVariable[];
+  optionsSource: OptionsSource | undefined;
   onChange: (value: unknown) => void;
 };
 
-function PropertyControl({ property, fieldId, describedBy, invalid, value, variables, onChange }: ControlProps) {
+function PropertyControl({
+  property,
+  fieldId,
+  describedBy,
+  invalid,
+  value,
+  variables,
+  optionsSource,
+  onChange,
+}: ControlProps) {
   const shared = {
     id: fieldId,
     "aria-describedby": describedBy,
@@ -177,7 +199,7 @@ function PropertyControl({ property, fieldId, describedBy, invalid, value, varia
           variables={variables}
           maxLength={property.maxLength}
           multiline
-          rich
+          rich={property.rich ?? false}
           onChange={onChange}
         />
       );
@@ -234,6 +256,28 @@ function PropertyControl({ property, fieldId, describedBy, invalid, value, varia
         </Select>
       );
 
+    /**
+     * Fetched from the service rather than declared, so it needs the step's connection to ask with.
+     * Without a source there is nothing to fetch through, which is a build mismatch rather than a
+     * state an author can be in — so it falls through to the same notice an unknown type gets.
+     */
+    case "dynamicDropdown":
+      if (optionsSource) {
+        return (
+          <DynamicDropdownField
+            property={property}
+            source={optionsSource}
+            fieldId={fieldId}
+            describedBy={describedBy}
+            invalid={invalid}
+            value={asText(value)}
+            onChange={onChange}
+          />
+        );
+      }
+
+      break;
+
     case "json":
       return (
         <TemplateField
@@ -253,13 +297,15 @@ function PropertyControl({ property, fieldId, describedBy, invalid, value, varia
      * nothing, which would look like a kit with a missing field and lose the value silently on the next save.
      */
     default:
-      return (
-        <p className="rounded-lg bg-node-amber/10 px-3 py-2.5 text-node-amber text-xs leading-relaxed">
-          This field needs a newer version of the builder than the one you are running. Reload the page; if it persists,
-          the web app and the API are on different versions.
-        </p>
-      );
+      break;
   }
+
+  return (
+    <p className="rounded-lg bg-node-amber/10 px-3 py-2.5 text-node-amber text-xs leading-relaxed">
+      This field needs a newer version of the builder than the one you are running. Reload the page; if it persists, the
+      web app and the API are on different versions.
+    </p>
+  );
 }
 
 /**
@@ -274,6 +320,7 @@ export function PropertyFields({
   input,
   variables,
   errors,
+  optionsSource,
   onChange,
 }: {
   properties: readonly KitProperty[];
@@ -281,6 +328,7 @@ export function PropertyFields({
   input: Record<string, unknown>;
   variables: TemplateVariable[];
   errors?: Readonly<Record<string, string>>;
+  optionsSource?: OptionsSource;
   onChange: (name: string, value: unknown) => void;
 }) {
   if (properties.length === 0) {
@@ -301,6 +349,7 @@ export function PropertyFields({
           value={input[property.name] ?? property.defaultValue}
           variables={variables}
           error={errors?.[property.name]}
+          optionsSource={optionsSource}
           onChange={(value) => onChange(property.name, value)}
         />
       ))}

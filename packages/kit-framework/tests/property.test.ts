@@ -44,6 +44,7 @@ describe("which properties accept a variable", () => {
       Property.checkbox({ displayName: "d" }),
       Property.staticDropdown({ displayName: "e", options: [] }),
       Property.json({ displayName: "f" }),
+      Property.dynamicDropdown({ displayName: "g", loadOptions: async () => [] }),
     ].map((property) => property.type);
 
     expect(constructed.toSorted()).toEqual([...config.kits.propertyTypes].toSorted());
@@ -78,5 +79,20 @@ describe("bounds on a number", () => {
 
     expect(plain.minimum).toBeUndefined();
     expect(plain.maximum).toBeUndefined();
+  });
+});
+
+/**
+ * A rich field's value is HTML, so this is not a presentational flag: the one place it is wanted is
+ * an email body, and every other long text — a JSON request body, a log line, Slack mrkdwn — is sent
+ * somewhere that would receive the markup literally.
+ */
+describe("long text is plain unless a kit asks for formatting", () => {
+  test("defaults to plain, so markup cannot arrive by forgetting", () => {
+    expect(Property.longText({ displayName: "Body" }).rich).toBe(false);
+  });
+
+  test("is rich only when declared", () => {
+    expect(Property.longText({ displayName: "Body", rich: true }).rich).toBe(true);
   });
 });
