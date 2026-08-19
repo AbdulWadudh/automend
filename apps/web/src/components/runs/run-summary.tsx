@@ -129,10 +129,12 @@ export function RunTotals({ stats }: { stats: RunStats }) {
 }
 
 export function FlowStatsTable({ stats, onSelectFlow }: { stats: RunStats; onSelectFlow: (flowId: string) => void }) {
+  // Bounded, because this sits above the feed and must not push it to nothing when a workspace has many
+  // flows. The header is opaque rather than `bg-muted/40`, or the rows show through it as they pass under.
   return (
-    <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
+    <div className="max-h-64 overflow-auto rounded-xl ring-1 ring-foreground/10">
       <table className="w-full min-w-[42rem] text-sm">
-        <thead className="bg-muted/40 text-muted-foreground text-xs">
+        <thead className="sticky top-0 z-10 bg-muted text-muted-foreground text-xs">
           <tr>
             <th scope="col" className="px-4 py-2.5 text-left font-medium">
               Flow

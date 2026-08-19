@@ -874,6 +874,17 @@ export const config = {
       defaultStatsWindowHours: 24,
       maxStatsWindowHours: 24 * 30,
       statsWindowChoices: [1, 24, 24 * 7, 24 * 30],
+      /**
+       * The feed and the open run beside it, as percentages. Strings for the same reason the builder's
+       * are: a bare number is pixels to `react-resizable-panels` v4.
+       */
+      layout: {
+        storageId: "automend.runs-layout",
+        feedPercent: "58",
+        detailPercent: "42",
+        minFeedPercent: "32",
+        minDetailPercent: "28",
+      },
       /** A step may return a megabyte of JSON; pasting all of it into the DOM makes the page unusable. */
       payloadPreviewChars: 20_000,
     },

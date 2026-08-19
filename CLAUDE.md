@@ -382,6 +382,20 @@ Each of these was a real defect shipped in this codebase, not a style preference
   off-screen with it: the user asked to see the bottom of one panel and lost every other part of
   the app to get there.
 
+  **The rule, stated once:** the section holding the overflowing content is the section that scrolls,
+  and it must never make an ancestor scroll on its behalf. Every scrollable region is bounded by its
+  own height and clips its own content — so a page has *one* scroll container per visible region, not
+  a chain of them, and never the document.
+
+  Two consequences that are easy to get wrong:
+
+  - **Exactly one container per region.** If a region already scrolls, nothing inside it may also
+    scroll unless it is a genuinely separate panel with a bounded height of its own. Nested scroll
+    areas trap the wheel and leave people unable to reach the bottom of either.
+  - **A new region needs its own container.** A page added without `flex-1` and `overflow-y-auto` on
+    its content wrapper does not simply "not scroll" — it grows the shell and hands the overflow
+    upward, which is how one missing class puts a scrollbar on the whole app.
+
   Concretely, and these are the two mistakes that cause it:
 
   - A shell that owns the viewport is `h-dvh overflow-hidden`, **not** `min-h-dvh`. The latter grows
@@ -391,6 +405,27 @@ Each of these was a real defect shipped in this codebase, not a style preference
     `overflow-y-auto` has nothing to overflow *within* and the overflow escapes upward. This is the
     single most common reason a scroll container appears to do nothing, and adding `overflow-y-auto`
     somewhere higher up is not the fix — it is the bug.
+- **Only the part that grows scrolls. Everything that identifies it stays still.** Choosing to make a
+  panel a scroll container is half the decision; *where inside it the split goes* is the other half,
+  and it is the half that gets skipped. A panel's head — its title, its status, its summary figures,
+  its filter row — is what a person reads the scrolling content *against*. Put the whole panel inside
+  one `overflow-y-auto` and the head travels with the rows: the filters you are narrowing by leave the
+  screen, the run's status and ids slide away while you are reading the timeline you opened them for,
+  and the same control sits somewhere different every time you look for it. Content moving is
+  scrolling; the frame around it moving is the interface losing its place.
+
+  **The shape, and there is only one:** a panel is `flex flex-col`; its head is `shrink-0`; below it
+  sits exactly one `min-h-0 flex-1 overflow-y-auto` body holding *only* the variable-length content —
+  the list, the timeline, the log. Nothing that names, summarises, filters or acts on that content
+  goes inside the body.
+
+  If the head can itself grow without bound (a table of every flow, a long list of facts), it does not
+  get to push the body to nothing: bound it and let it scroll as its own panel. Two bounded siblings
+  is right; one scroller swallowing the head is not.
+
+  A shared component takes its bounds from its caller — a `className` carrying `min-h-0 flex-1` — so
+  the same component scrolls its body inside a drawer and simply grows inside a narrow page that
+  scrolls as one region. It must never assume a height of its own.
 - **Destructive confirmations keep their words.** An icon is fine shorthand for something you can
   undo by clicking again; it is the wrong shorthand for confirming something permanent.
 - **Colour comes from the existing palette, and never carries meaning alone.** The node accents in

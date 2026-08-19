@@ -32,9 +32,10 @@ function AppLayout() {
           <SidebarTrigger />
         </header>
 
-        <main className="flex min-h-0 flex-1 flex-col">
+        {/* A div, not a `main`: `SidebarInset` already renders the page's `main` landmark. */}
+        <div className="flex min-h-0 flex-1 flex-col">
           <Outlet />
-        </main>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -8,7 +8,6 @@ import {
   runDurationMs,
 } from "@automend/shared";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { RotateCcwIcon } from "lucide-react";
 import { CopyableId } from "@/components/runs/copyable-id";
 import { FlowPicker } from "@/components/runs/flow-picker";
@@ -24,23 +23,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatDateTime } from "@/lib/format-time";
 import { RUN_STATUS_TONES } from "@/lib/run-status";
 import { listRuns, type RunListFilters, runQueryKeys } from "@/lib/runs-api";
+import { cn } from "@/lib/utils";
 
-const { routes, runIdParam } = config.webClient;
 const { pageSize, liveRefetchIntervalMs } = config.runs.dashboard;
 
 /** Radix Select has no value for "no selection", so the absence of a filter needs a name of its own. */
 const ANY = "any";
 
-function RunRow({ run }: { run: RunListItem }) {
+function RunRow({ run, isOpen, onOpen }: { run: RunListItem; isOpen: boolean; onOpen: (runId: string) => void }) {
   const durationMs = runDurationMs(run);
   const retryLabel = describeRetries(run.retries);
 
   return (
-    <li className="flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 ring-1 ring-foreground/10 transition hover:-translate-y-px hover:bg-muted/30">
-      <Link
-        to={routes.runDetail}
-        params={{ [runIdParam]: run.id }}
-        className="min-w-0 flex-1 space-y-1 rounded-sm focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+    <li
+      className={cn(
+        "relative flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 ring-1 transition hover:-translate-y-px hover:bg-muted/30",
+        isOpen ? "bg-muted/40 ring-ring" : "ring-foreground/10",
+      )}
+    >
+      {/* A button, not a link: this opens the run beside the feed rather than navigating to it. Stretched
+          over the row with `after:inset-0` so the whole item is the target, while the row still has
+          exactly one thing in the tab order. */}
+      <button
+        type="button"
+        onClick={() => onOpen(run.id)}
+        className="min-w-0 flex-1 space-y-1 rounded-sm text-left after:absolute after:inset-0 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
       >
         <span className="flex flex-wrap items-center gap-2">
           <StatusChip tone={RUN_STATUS_TONES[run.status]} />
@@ -62,21 +69,31 @@ function RunRow({ run }: { run: RunListItem }) {
           {formatDateTime(run.createdAt)} · {run.stepCount === 1 ? "1 step" : `${run.stepCount} steps`}
           {durationMs !== null && ` · took ${formatDurationMs(durationMs)}`}
         </span>
-      </Link>
+      </button>
 
-      {/* Outside the link, because a copy control inside one is a button inside an anchor. */}
-      <CopyableId label="Run" value={run.id} short />
+      {/* Above the stretched button, or they would be unreachable beneath it. */}
+      <span className="relative z-10 flex items-center gap-3">
+        <CopyableId label="Run" value={run.id} short />
 
-      <RetriggerButton runId={run.id} status={run.status} retries={run.retries} size="xs" variant="ghost" />
+        <RetriggerButton runId={run.id} status={run.status} retries={run.retries} size="xs" variant="ghost" />
+      </span>
     </li>
   );
 }
 
 export function RunList({
   filters,
+  openRunId,
+  className,
+  onOpenRun,
   onFiltersChange,
 }: {
   filters: RunListFilters;
+  /** Highlighted in the list, so the panel beside it is visibly *this* row's run. */
+  openRunId: string | undefined;
+  /** Where the section's height comes from: bounded by the caller, the rows scroll; unbounded, they do not. */
+  className?: string;
+  onOpenRun: (runId: string) => void;
   onFiltersChange: (filters: RunListFilters) => void;
 }) {
   const runs = useInfiniteQuery({
@@ -95,8 +112,8 @@ export function RunList({
   const loaded = runs.data?.pages.flat() ?? [];
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <section className={cn("flex flex-col", className)}>
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3 border-b pb-4">
         <h2 className="font-semibold text-lg tracking-tight">Activity</h2>
 
         <div className="flex flex-wrap items-end gap-3">
@@ -139,51 +156,55 @@ export function RunList({
         </div>
       </div>
 
-      {runs.isPending && <p className="text-muted-foreground text-sm">Loading runs…</p>}
+      {/* The rows are the only part that grows, so the rows are the only part that scrolls — the heading and
+          the filters above stay where they were put. */}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pt-4 pb-1">
+        {runs.isPending && <p className="text-muted-foreground text-sm">Loading runs…</p>}
 
-      {runs.isError && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Could not load runs</CardTitle>
-            <CardDescription>{runs.error.message}</CardDescription>
-          </CardHeader>
-          <CardHeader>
-            <Button size="sm" variant="outline" className="w-fit" onClick={() => void runs.refetch()}>
-              Try again
-            </Button>
-          </CardHeader>
-        </Card>
-      )}
+        {runs.isError && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Could not load runs</CardTitle>
+              <CardDescription>{runs.error.message}</CardDescription>
+            </CardHeader>
+            <CardHeader>
+              <Button size="sm" variant="outline" className="w-fit" onClick={() => void runs.refetch()}>
+                Try again
+              </Button>
+            </CardHeader>
+          </Card>
+        )}
 
-      {runs.isSuccess && loaded.length === 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Nothing here</CardTitle>
-            <CardDescription>
-              {filters.flowId || filters.status
-                ? "No run matches these filters. Widen them, or pick a longer window above."
-                : "This workspace has not run anything yet. Open a flow and press Run to see it appear here."}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+        {runs.isSuccess && loaded.length === 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Nothing here</CardTitle>
+              <CardDescription>
+                {filters.flowId || filters.status
+                  ? "No run matches these filters. Widen them, or pick a longer window above."
+                  : "This workspace has not run anything yet. Open a flow and press Run to see it appear here."}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
 
-      <ul className="space-y-2">
-        {loaded.map((run) => (
-          <RunRow key={run.id} run={run} />
-        ))}
-      </ul>
+        <ul className="space-y-2">
+          {loaded.map((run) => (
+            <RunRow key={run.id} run={run} isOpen={run.id === openRunId} onOpen={onOpenRun} />
+          ))}
+        </ul>
 
-      {runs.hasNextPage && (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={runs.isFetchingNextPage}
-          onClick={() => void runs.fetchNextPage()}
-        >
-          {runs.isFetchingNextPage ? "Loading…" : "Load more"}
-        </Button>
-      )}
+        {runs.hasNextPage && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={runs.isFetchingNextPage}
+            onClick={() => void runs.fetchNextPage()}
+          >
+            {runs.isFetchingNextPage ? "Loading…" : "Load more"}
+          </Button>
+        )}
+      </div>
     </section>
   );
 }
