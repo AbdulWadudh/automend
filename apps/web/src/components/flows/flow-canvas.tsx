@@ -14,6 +14,7 @@ import {
   type NodeChange,
   ReactFlow,
   ReactFlowProvider,
+  useNodesInitialized,
   useReactFlow,
 } from "@xyflow/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -147,8 +148,46 @@ function FlowCanvasInner({ definition, selectedNodeId, catalogue, connections, o
   const [nodes, setNodes] = useState<FlowCanvasNode[]>(() => toCanvasNodes(definition, selectedNodeId, catalogue));
   const [edges, setEdges] = useState<Edge[]>(() => toCanvasEdges(definition));
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | undefined>(undefined);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
   const wrapper = useRef<HTMLDivElement>(null);
+  const nodesInitialized = useNodesInitialized();
+  /** Set only by a real gesture — `fitView` moves the viewport too, and that must not count. */
+  const hasMoved = useRef(false);
+
+  /**
+   * Keeps the graph centred until somebody moves it themselves.
+   *
+   * Two things push it off centre, and the `fitView` prop handles neither. It runs before a custom
+   * node has been measured, so it centres the *default* 150×40 box rather than the node that ends up
+   * on screen; and the canvas sits in a resizable panel, so its width changes after mount and again
+   * whenever the split is dragged.
+   *
+   * So it re-fits on both — and stops the moment there is a viewport somebody chose, because
+   * re-centring a canvas that has just been panned is worse than never centring it at all.
+   */
+  useEffect(() => {
+    const element = wrapper.current;
+
+    if (!nodesInitialized || !element) {
+      return;
+    }
+
+    const refit = () => {
+      if (hasMoved.current) {
+        return;
+      }
+
+      void fitView({ padding: canvas.fitViewPadding, maxZoom: canvas.fitViewMaxZoom });
+    };
+
+    refit();
+
+    const observer = new ResizeObserver(refit);
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [nodesInitialized, fitView]);
 
   // The definition is the source of truth: whenever it changes — an added step, an undone edit,
   // a reload — the canvas is rebuilt from it rather than being patched to match.
@@ -264,6 +303,11 @@ function FlowCanvasInner({ definition, selectedNodeId, catalogue, connections, o
         onConnectEnd={handleConnectEnd}
         onNodeClick={(_event, node) => onSelect(node.id)}
         onPaneClick={() => onSelect(undefined)}
+        onMoveStart={(event) => {
+          if (event) {
+            hasMoved.current = true;
+          }
+        }}
         minZoom={canvas.minZoom}
         maxZoom={canvas.maxZoom}
         fitView

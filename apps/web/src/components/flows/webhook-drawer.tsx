@@ -111,7 +111,7 @@ export function WebhookDrawer({ className, flowId, savedPath, open, onOpenChange
       // `lg:min-h-0` alongside `lg:h-full`: without it this flex child will not shrink below its content, so the
       // inner `overflow-y-auto` has nothing to overflow within and the page scrolls instead of the drawer.
       className={cn(
-        "flex w-full shrink-0 flex-col border-t bg-card/40 lg:h-full lg:min-h-0 lg:w-[26rem] lg:border-t-0 lg:border-l xl:w-[30rem]",
+        "flex w-full shrink-0 flex-col border-t bg-card/40 lg:h-full lg:min-h-0 lg:w-104 lg:border-t-0 lg:border-l xl:w-120",
         className,
       )}
     >
