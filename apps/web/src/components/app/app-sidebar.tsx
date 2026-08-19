@@ -2,14 +2,13 @@ import { config } from "@automend/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
+  ChevronLeftIcon,
   ChevronsUpDownIcon,
   GaugeIcon,
   HistoryIcon,
-  LaptopIcon,
   LogOutIcon,
   MoonIcon,
   PlugIcon,
-  SunIcon,
   UserRoundIcon,
   WorkflowIcon,
 } from "lucide-react";
@@ -21,11 +20,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { IconAction } from "@/components/ui/icon-action";
 import {
   Sidebar,
   SidebarContent,
@@ -37,10 +35,14 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { authClient, signOut } from "@/lib/auth-client";
 import { fetchOpsConsoles, operationsQueryKeys } from "@/lib/operations-api";
-import { type Theme, useTheme } from "@/lib/theme";
+import { resolveTheme, useTheme } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 
 const { routes } = config.webClient;
 
@@ -68,7 +70,7 @@ function NavLinks({ items }: { items: NavItem[] }) {
   const isActive = useIsActive();
 
   return (
-    <SidebarMenu>
+    <SidebarMenu className="group-data-[collapsible=icon]:items-center">
       {items.map((item) => (
         <SidebarMenuItem key={item.to}>
           <SidebarMenuButton asChild isActive={isActive(item.to)} tooltip={item.label}>
@@ -152,19 +154,84 @@ function buildInitials(name: string | undefined, email: string | undefined): str
   return (email?.[0] ?? "?").toUpperCase();
 }
 
-/** The same three the profile page offers, so the two never drift into different choices. */
-const THEME_ITEMS: { value: Theme; label: string; icon: ComponentType<{ className?: string }> }[] = [
-  { value: "system", label: "System", icon: LaptopIcon },
-  { value: "light", label: "Light", icon: SunIcon },
-  { value: "dark", label: "Dark", icon: MoonIcon },
-];
+/**
+ * Dark mode as a switch, which is a binary control over a setting that has three values.
+ *
+ * Flipping it writes `light` or `dark` explicitly, so the switch and the surface can never disagree
+ * about what is on. What a switch cannot express is `system`, and that choice stays on the profile
+ * page — a machine that changes at sunset is a real thing to want, and a switch has nowhere to put it.
+ */
+function DarkModeRow() {
+  const { open } = useSidebar();
+  const { theme, setTheme } = useTheme();
+  const isDark = resolveTheme(theme) === "dark";
+
+  const control = (
+    <Switch id="sidebar-dark-mode" checked={isDark} onCheckedChange={(next) => setTheme(next ? "dark" : "light")} />
+  );
+
+  return (
+    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+      <MoonIcon className="size-4 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" aria-hidden />
+
+      {/*
+        `sr-only` rather than removed: the switch keeps the label that names it, so it is still "Dark mode"
+        to a screen reader when the rail is too narrow to print the words.
+      */}
+      <label htmlFor="sidebar-dark-mode" className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:sr-only">
+        Dark mode
+      </label>
+
+      {/* And a tooltip while the words are hidden, so a pointer and a keyboard can both find out what it is. */}
+      {open ? (
+        control
+      ) : (
+        <Tooltip>
+          {/*
+            The span is not a wrapper for layout — it is there to take the trigger's `data-state`.
+            `asChild` on the switch itself overwrites the `checked`/`unchecked` that colours the track.
+          */}
+          <TooltipTrigger asChild>
+            <span className="inline-flex">{control}</span>
+          </TooltipTrigger>
+          <TooltipContent side="right">Dark mode</TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One control, rendered twice — beside the logo when the panel is open, on the rail's edge when it is not.
+ *
+ * Shared rather than written out at both sites because the label and the arrow's direction are the whole
+ * behaviour, and two copies of that is two chances for the chevron to point the wrong way.
+ *
+ * Neither copy sets its own size or radius. It is a `Button`, so it wears `rounded-md` like every other
+ * control here — `rounded-full` in this codebase is for dots, badges, avatars and the switch track, never
+ * for something you press. The edge copy adds only a border and a surface, because it is the one sitting
+ * on a line and needs to read as being on top of it.
+ */
+function MenuToggle({ open, onToggle, className }: { open: boolean; onToggle: () => void; className: string }) {
+  return (
+    <IconAction
+      label={open ? "Collapse the menu" : "Expand the menu"}
+      aria-expanded={open}
+      onClick={onToggle}
+      className={className}
+    >
+      {/* Points the way it will move, rather than naming a state it is not in. */}
+      <ChevronLeftIcon className={cn("motion-safe:transition-transform", !open && "rotate-180")} />
+    </IconAction>
+  );
+}
 
 export function AppSidebar() {
+  const { open, toggleSidebar } = useSidebar();
   const isActive = useIsActive();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: session } = authClient.useSession();
-  const { theme, setTheme } = useTheme();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   async function handleSignOut() {
@@ -184,15 +251,55 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="gap-2">
-        <Link
-          to={routes.flows}
-          className="flex items-center gap-2.5 rounded-lg px-2 py-1 font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
-        >
-          <img src="/logo.webp" alt="" width={32} height={20} className="h-5 w-auto shrink-0" />
-          <span className="truncate group-data-[collapsible=icon]:hidden">{config.company.productName}</span>
-        </Link>
+        <div className="flex items-center gap-1">
+          <Link
+            to={routes.flows}
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1 font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          >
+            {/*
+              `max-w-none` because Preflight gives every image `max-width: 100%`, and inside the collapsed
+              rail the box around it is narrower than the mark: the width clamps, the height class holds,
+              and the logo comes out squashed. The intrinsic pixel dimensions are on the element so the
+              browser knows the real aspect ratio and reserves the right box before the file arrives.
+            */}
+            <img
+              src="/logo.webp"
+              alt=""
+              width={379}
+              height={237}
+              className="h-6 w-auto max-w-none shrink-0 group-data-[collapsible=icon]:h-5"
+            />
+            <span className="truncate group-data-[collapsible=icon]:hidden">{config.company.productName}</span>
+          </Link>
+
+          {/* Beside the logo while the panel is wide enough to hold both. */}
+          <MenuToggle
+            open={open}
+            onToggle={toggleSidebar}
+            className="relative shrink-0 after:absolute after:-inset-2 group-data-[collapsible=icon]:hidden"
+          />
+        </div>
+
         <WorkspaceName />
       </SidebarHeader>
+
+      {/*
+        The collapsed rail's copy, straddling the edge instead of sitting inside it.
+        
+        At 3rem there is no room beside the logo, and a control that moves a boundary reads well *on* the
+        boundary: `right-0` puts it at the rail's own edge and `translate-x-1/2` carries half of it across.
+        `top-5.5` with `-translate-y-1/2` centres it on the logo row — 8px of header padding, 4px of link
+        padding and half of a 20px mark.
+
+        Outside `SidebarHeader` on purpose: the header is padded, so anchoring to it would put the button on
+        the padding edge rather than on the line. It positions against the sidebar container instead, which
+        is already `fixed` and therefore the nearest positioned ancestor.
+      */}
+      <MenuToggle
+        open={open}
+        onToggle={toggleSidebar}
+        className="absolute top-5.5 right-0 z-20 hidden -translate-y-1/2 translate-x-1/2 border bg-sidebar shadow-sm after:absolute after:-inset-2 group-data-[collapsible=icon]:inline-flex"
+      />
 
       <SidebarContent>
         <SidebarGroup>
@@ -210,7 +317,9 @@ export function AppSidebar() {
         collapses to a stub floating beside the icon rail once the sidebar is narrow.
       */}
       <SidebarFooter>
-        <SidebarMenu>
+        <DarkModeRow />
+
+        <SidebarMenu className="group-data-[collapsible=icon]:items-center">
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -240,18 +349,6 @@ export function AppSidebar() {
                     Profile
                   </Link>
                 </DropdownMenuItem>
-
-                <DropdownMenuSeparator />
-
-                <DropdownMenuLabel className="font-normal text-muted-foreground text-xs">Theme</DropdownMenuLabel>
-                <DropdownMenuRadioGroup value={theme} onValueChange={(next) => setTheme(next as Theme)}>
-                  {THEME_ITEMS.map((item) => (
-                    <DropdownMenuRadioItem key={item.value} value={item.value}>
-                      <item.icon className="size-4" />
-                      {item.label}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
 
                 <DropdownMenuSeparator />
 
