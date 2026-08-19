@@ -1,6 +1,7 @@
 import { createAction, Property, requireOAuthToken } from "@automend/kit-framework";
 import { config } from "@automend/shared";
 import { assertSlackOk, bearer, parseSlack, postedMessageSchema, slackUrls } from "../common/api";
+import { parseSlackBlocks } from "../common/blocks";
 import { loadChannelOptions } from "../common/channels";
 
 const { validation } = config;
@@ -27,9 +28,15 @@ export const slackSendMessageAction = createAction({
     text: Property.longText({
       displayName: "Message",
       description:
-        "Slack mrkdwn: *bold*, _italic_, ~strike~, `code`, <https://example.com|a link>, <@U0123ABCD> and <#C0123ABCD>.",
+        "Slack mrkdwn: *bold*, _italic_, ~strike~, `code`, <https://example.com|a link>, <@U0123ABCD> and <#C0123ABCD>. With blocks below, this is what notifications and screen readers show.",
       required: true,
       maxLength: validation.slackMessage.maxLength,
+    }),
+    blocks: Property.json({
+      displayName: "Blocks",
+      description:
+        'Optional Block Kit layout. Paste straight from Slack\'s Block Kit Builder — the array or the whole {"blocks": [...]} object. Supports variables.',
+      maxLength: validation.slackBlocks.maxLength,
     }),
     threadTs: Property.shortText({
       displayName: "Reply to",
@@ -43,7 +50,8 @@ export const slackSendMessageAction = createAction({
   },
   run: async (context) => {
     const accessToken = requireOAuthToken(context);
-    const { channel, text, threadTs, replyBroadcast } = context.input;
+    const { channel, text, blocks, threadTs, replyBroadcast } = context.input;
+    const layout = parseSlackBlocks(blocks);
 
     const response = await context.http.request({
       method: "POST",
@@ -51,7 +59,11 @@ export const slackSendMessageAction = createAction({
       headers: { ...bearer(accessToken), "content-type": "application/json; charset=utf-8" },
       body: {
         channel,
+        // Sent alongside `blocks`, never instead of it: Slack shows this in notifications and in
+        // clients that cannot render the layout, so dropping it makes a message that pings people
+        // with nothing readable in the ping.
         text,
+        ...(layout ? { blocks: layout } : {}),
         ...(threadTs ? { thread_ts: threadTs, reply_broadcast: replyBroadcast } : {}),
       },
     });

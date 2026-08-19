@@ -1187,6 +1187,15 @@ export const config = {
     slackTimestamp: {
       maxLength: 200,
     },
+    /**
+     * Block Kit JSON, at rest.
+     *
+     * Larger than the message bound because this is markup rather than prose: fifty blocks of
+     * sections, fields and image URLs is a lot of characters carrying not much text.
+     */
+    slackBlocks: {
+      maxLength: 100_000,
+    },
     webhookPath: {
       minLength: 1,
       maxLength: 200,

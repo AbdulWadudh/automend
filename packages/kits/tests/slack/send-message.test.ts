@@ -57,6 +57,60 @@ describe("slack.sendMessage", () => {
     expect(JSON.stringify(output)).not.toContain("Bank details");
   });
 
+  describe("Block Kit", () => {
+    const section = { type: "section", text: { type: "mrkdwn", text: "Meet Asha" } };
+
+    test("sends the layout alongside the text, never instead of it", async () => {
+      const http = createFakeHttp([posted]);
+
+      await slackSendMessageAction.invoke(
+        createFakeContext({ http, input: { ...input, blocks: [section] }, auth: slackOAuth }),
+      );
+
+      const body = http.calls[0]?.body as { text?: string; blocks?: unknown[] };
+
+      // Both: Slack shows `text` in notifications and wherever the layout cannot render, so a message
+      // sent without it pings people with nothing readable in the ping.
+      expect(body.blocks).toEqual([section]);
+      expect(body.text).toBe("Invoice 1024 has been paid.");
+    });
+
+    /** The shape Slack's own Block Kit Builder copies out, which is where authors get these. */
+    test("accepts what the Block Kit Builder copies out", async () => {
+      const http = createFakeHttp([posted]);
+
+      await slackSendMessageAction.invoke(
+        createFakeContext({ http, input: { ...input, blocks: { blocks: [section] } }, auth: slackOAuth }),
+      );
+
+      const body = http.calls[0]?.body as { blocks?: unknown[] } | undefined;
+
+      expect(body?.blocks).toEqual([section]);
+    });
+
+    test("omits blocks entirely when the field is empty", async () => {
+      const http = createFakeHttp([posted]);
+
+      await slackSendMessageAction.invoke(
+        createFakeContext({ http, input: { ...input, blocks: "" }, auth: slackOAuth }),
+      );
+
+      expect(http.calls[0]?.body).not.toHaveProperty("blocks");
+    });
+
+    /** Better than Slack's own `invalid_blocks`, which names neither the field nor the block. */
+    test("a malformed layout fails before the request, naming the block", async () => {
+      const http = createFakeHttp([posted]);
+
+      await expect(
+        slackSendMessageAction.invoke(
+          createFakeContext({ http, input: { ...input, blocks: [section, { nope: true }] }, auth: slackOAuth }),
+        ),
+      ).rejects.toThrow(/Block 2/);
+      expect(http.calls).toHaveLength(0);
+    });
+  });
+
   /** A reply's own `ts` is not the thread it belongs to, and a later step needs the thread. */
   test("hands a threaded reply back the thread it joined, not its own timestamp", async () => {
     const http = createFakeHttp([ok({ ok: true, channel: "C0123ABCDEF", ts: "1735689600.000200" })]);
