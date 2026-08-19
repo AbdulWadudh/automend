@@ -17,3 +17,6 @@ build/
 .bun/
 *.tsbuildinfo
 .claude/skills
+
+# TanStack Router writes its scratch files here.
+apps/web/.tanstack/
