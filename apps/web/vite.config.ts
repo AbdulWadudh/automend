@@ -6,6 +6,7 @@ import { defineConfig, loadEnv } from "vite";
 // Imported by path rather than by package name: Vite bundles this config with esbuild before any
 // workspace resolution is available.
 import { config } from "../../packages/shared/src/config";
+import { deriveAllowedHosts } from "./src/lib/dev-hosts";
 
 const srcDirectory = fileURLToPath(new URL("./src", import.meta.url));
 
@@ -67,6 +68,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: config.services.web.devServerPort,
+      allowedHosts: deriveAllowedHosts([env.AUTH_BASE_URL, env.WEB_ORIGIN]),
       proxy: {
         [config.http.routes.apiProxyPrefix]: { target: apiProxyTarget, changeOrigin: true },
         // The api serves the queue dashboard here. Deliberately no `rewrite`: the dashboard builds
