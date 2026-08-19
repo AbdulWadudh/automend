@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { insertFlow, listFlowsForTenant } from "../src/flows";
+import { createFlowRunWithOutbox } from "../src/runs";
 import { databaseUrl, setupDatabase, stubDefinition, type TestDatabase } from "./support/database";
 
 const hasDatabase = databaseUrl() !== undefined;
@@ -64,6 +65,37 @@ describeWithDatabase("searching a workspace's flows", () => {
     const rows = await listFlowsForTenant(context.db, context.tenantId);
 
     expect(rows.every((row) => row.lastRunAt === null)).toBe(true);
+  });
+
+  /**
+   * The half the null case cannot prove.
+   *
+   * A correlated subquery that always returns null passes "never run reports no last run" perfectly,
+   * which is exactly what shipped: the outer column lost its qualifier and the comparison resolved
+   * against the inner table, so every flow reported never having run. Asserting the *populated* case
+   * is the only version that fails when that happens.
+   */
+  test("a flow that has run reports when", async () => {
+    const before = Date.now();
+
+    await createFlowRunWithOutbox(context.db, {
+      tenantId: context.tenantId,
+      flowId: context.flowId,
+      source: "manual",
+      idempotencyKey: `last-run-${crypto.randomUUID()}`,
+      definitionSnapshot: stubDefinition(),
+      triggerPayload: null,
+    });
+
+    const rows = await listFlowsForTenant(context.db, context.tenantId);
+    const ran = rows.find((row) => row.id === context.flowId);
+
+    expect(ran?.lastRunAt).toBeInstanceOf(Date);
+    // Within a second either side of the insert, so this cannot pass on a stale or unrelated row.
+    expect(ran?.lastRunAt?.getTime() ?? 0).toBeGreaterThanOrEqual(before - 1000);
+
+    // And the flows that did not run still say so, so the fix did not simply populate every row.
+    expect(rows.some((row) => row.id !== context.flowId && row.lastRunAt === null)).toBe(true);
   });
 
   test("the limit bounds what comes back", async () => {

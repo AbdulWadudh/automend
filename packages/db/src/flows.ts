@@ -58,9 +58,15 @@ export type FlowListRow = FlowRow & { lastRunAt: Date | null };
 /**
  * Correlated rather than a join and a `group by`: a join would multiply each flow by its runs and force
  * every other column into the grouping, for one value.
+ *
+ * Both sides are written out rather than interpolated as columns, and this is not a style choice.
+ * Drizzle renders a column inside a select-list expression *unqualified*, so `${flowRuns.flowId} =
+ * ${flows.id}` became `"flow_id" = "id"` — and inside the subquery both of those resolve to
+ * `flow_runs`, so it asked whether a run's flow id equalled its own id. Never true, `max` returned
+ * null, and every flow reported that it had never run.
  */
-const lastRunAtColumn = sql<Date | null>`(
-  select max(${flowRuns.createdAt}) from ${flowRuns} where ${flowRuns.flowId} = ${flows.id}
+const lastRunAtColumn = sql<string | null>`(
+  select max(runs.created_at) from ${flowRuns} as runs where runs.flow_id = ${flows}.id
 )`;
 
 export async function listFlowsForTenant(
@@ -82,7 +88,13 @@ export async function listFlowsForTenant(
 
   const rows = await (options.limit === undefined ? query : query.limit(options.limit));
 
-  return rows.map((row) => ({ ...withCurrentDefinition(row), lastRunAt: row.lastRunAt }));
+  return rows.map((row) => ({
+    ...withCurrentDefinition(row),
+    // `string | null` above, and converted here, because a raw `sql` expression has no column for the
+    // driver's mapper to consult — the timestamp arrives as Postgres wrote it. Callers get the `Date`
+    // the type promises rather than a string that only looks like one until something calls a method.
+    lastRunAt: row.lastRunAt === null ? null : new Date(row.lastRunAt),
+  }));
 }
 
 export async function findFlowForTenant(db: Database, tenantId: string, flowId: string): Promise<FlowRow | undefined> {
