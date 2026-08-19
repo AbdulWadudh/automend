@@ -46,11 +46,22 @@ was the moment to split it rather than a reason to grow it further.
   written by hand rather than pulled from the shadcn CLI, which insists on overwriting `button.tsx`
   and this codebase's own size scale with it. `Dialog` is for a task, `AlertDialog` stays for a
   decision, and the two share an overlay, radius and motion so they read as one product.
-- **Provider marks wear their brand colour, on a white tile in both themes.** A brand hex is one value
-  chosen against white, so it cannot serve two surfaces: measured against this app's `muted`, Google's
-  blue is 2.80:1 in light mode and Slack's aubergine 1.85:1 in dark — an invisible logo either way. On
-  white every mark clears 3:1 in both themes (Google 3.56:1, Discord 4.61:1, the near-black marks far
-  higher), which is the background their guidelines assume anyway.
+- **Provider marks wear their real colours, on a white tile in both themes.** A brand's colours are
+  chosen against white, so they cannot serve two surfaces: measured against this app's `muted`,
+  Google's blue is 2.80:1 in light mode and Slack's aubergine 1.85:1 in dark — an invisible logo
+  either way. On white every mark clears 3:1 in both themes (Google 3.56:1, Discord 4.61:1, the
+  near-black marks far higher), which is the background their guidelines assume anyway.
+- **One rule for company marks, written down in `provider-icon.tsx` so a new connector never needs it
+  decided again**: a genuinely multi-colour logo uses a faithful multi-colour glyph; anything else uses
+  the single-path mark tinted with the brand's *own* exported hex; and where no package ships the mark
+  at all, a lettermark in the brand's colour. Never a redrawn logo. Slack is that last case — it asked
+  Simple Icons to withdraw its logo and react-icons' snapshot has none either (the only `SiSlack*`
+  export anywhere is Slackware), so it gets an aubergine letter rather than a borrowed glyph.
+- **`react-icons` joins the dependencies, for `FcGoogle` only.** Google's G is four colours, and Simple
+  Icons draws it as a single path — tinting that path any one colour is the wrong logo. Marks that
+  really are monochrome keep coming from Simple Icons with the brand's own hex, so `BrandMark.hex` is
+  optional: present for a single-path mark, absent for one that carries its own colours. Tree-shaking
+  keeps the cost to +0.4 kB gzipped.
 - Every badge carries an icon as well as a tint — "Never run", "Not configured", OAuth vs Token —
   since none of them may rest on colour alone.
 
