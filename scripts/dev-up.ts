@@ -45,8 +45,30 @@ function fail(message: string, hint?: string): never {
   process.exit(1);
 }
 
+/**
+ * The parent's environment, minus anything that would make a child bun open a debugger.
+ *
+ * VS Code's debug terminal exports `BUN_INSPECT*` so the process it starts serves an inspector on a
+ * fixed port. `Bun.spawn` inherits the environment, so every bun this script starts inherits the
+ * same port and the second one to reach it dies with EADDRINUSE — which surfaces as "Failed to
+ * start inspector" from `db:migrate` and looks like a migration failure. Nobody steps through a
+ * migration from here anyway; the app you actually want to debug is started separately.
+ */
+function environmentWithoutInspector(): Record<string, string> {
+  const inherited = Object.entries(process.env).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined && !entry[0].startsWith("BUN_INSPECT"),
+  );
+
+  return Object.fromEntries(inherited);
+}
+
 async function capture(command: string[]): Promise<CommandResult> {
-  const child = Bun.spawn(command, { cwd: repositoryRoot, stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn(command, {
+    cwd: repositoryRoot,
+    env: environmentWithoutInspector(),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
 
   return { exitCode: await child.exited, stdout: stdout.trim(), stderr: stderr.trim() };
@@ -54,7 +76,12 @@ async function capture(command: string[]): Promise<CommandResult> {
 
 /** Streams straight to this terminal — compose's progress output is the point of running it. */
 async function forward(command: string[]): Promise<number> {
-  const child = Bun.spawn(command, { cwd: repositoryRoot, stdout: "inherit", stderr: "inherit" });
+  const child = Bun.spawn(command, {
+    cwd: repositoryRoot,
+    env: environmentWithoutInspector(),
+    stdout: "inherit",
+    stderr: "inherit",
+  });
   return await child.exited;
 }
 

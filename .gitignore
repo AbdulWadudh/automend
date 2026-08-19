@@ -12,6 +12,8 @@ build/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+# Shared debug configuration — see changelog for why the api and worker each need their own session.
+!.vscode/launch.json
 
 # Bun / tooling caches
 .bun/

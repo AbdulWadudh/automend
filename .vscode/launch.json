@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "bun",
+      "request": "launch",
+      "name": "Debug api",
+      "program": "src/index.ts",
+      "cwd": "${workspaceFolder}/apps/api",
+      "runtimeArgs": ["--env-file=../../.env"],
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "type": "bun",
+      "request": "launch",
+      "name": "Debug worker",
+      "program": "src/index.ts",
+      "cwd": "${workspaceFolder}/apps/worker",
+      "runtimeArgs": ["--env-file=../../.env"],
+      "internalConsoleOptions": "openOnSessionStart"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug api + worker",
+      "configurations": ["Debug api", "Debug worker"],
+      "stopAll": true
+    }
+  ]
+}
