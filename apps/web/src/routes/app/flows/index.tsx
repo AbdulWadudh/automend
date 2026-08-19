@@ -1,23 +1,17 @@
-import { config, type Flow, type FlowListItem } from "@automend/shared";
+import { config } from "@automend/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { PlusIcon, WorkflowIcon } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
+import { FlowCard } from "@/components/flows/flow-card";
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { createFlow, deleteFlow, flowQueryKeys, listFlows } from "@/lib/flows-api";
+import { Skeleton } from "@/components/ui/skeleton";
+import { createFlow, flowQueryKeys, listFlows } from "@/lib/flows-api";
 
-const { routes } = config.webClient;
 const { flowName } = config.validation;
-
-const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
-
-function describeSize(flow: Flow): string {
-  const stepCount = flow.definition.steps.length;
-
-  return stepCount === 1 ? "1 step" : `${stepCount} steps`;
-}
 
 function NewFlowForm() {
   const queryClient = useQueryClient();
@@ -42,21 +36,22 @@ function NewFlowForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <Input
         aria-label="Name of the new flow"
         placeholder="Name your flow"
         value={name}
         maxLength={flowName.maxLength}
         onChange={(event) => setName(event.target.value)}
-        className="sm:max-w-xs"
+        className="sm:w-64"
       />
-      <Button type="submit" size="lg" disabled={create.isPending || name.trim().length < flowName.minLength}>
+      <Button type="submit" disabled={create.isPending || name.trim().length < flowName.minLength}>
+        <PlusIcon />
         {create.isPending ? "Creating…" : "New flow"}
       </Button>
 
       {create.isError && (
-        <p role="alert" className="self-center text-destructive text-sm">
+        <p role="alert" className="text-destructive text-sm sm:self-center">
           {create.error.message}
         </p>
       )}
@@ -64,68 +59,20 @@ function NewFlowForm() {
   );
 }
 
-function FlowCard({ flow }: { flow: FlowListItem }) {
-  const queryClient = useQueryClient();
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-
-  const remove = useMutation({
-    mutationFn: () => deleteFlow(flow.id),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: flowQueryKeys.lists() });
-      toast.success(`Deleted "${flow.name}"`);
-    },
-    onError: (error) => toast.error("Could not delete the flow", { description: error.message }),
-  });
-
+/** Shaped like the card it stands in for, so nothing moves when the real ones arrive. */
+function FlowCardSkeleton() {
   return (
-    <Card className="relative transition hover:-translate-y-px hover:bg-muted/30">
-      <CardHeader>
-        <CardTitle>
-          {/*
-            One real link, stretched over the card with `after:inset-0`, rather than a link per region
-            or a click handler on the card: the whole surface becomes the target while there is still
-            exactly one thing in the tab order that says where it goes.
-          */}
-          <Link
-            to={routes.flowDetail}
-            params={{ flowId: flow.id }}
-            className="rounded-sm after:absolute after:inset-0 hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
-          >
-            {flow.name}
-          </Link>
-        </CardTitle>
-        <CardDescription>
-          {describeSize(flow)} · edited {dateFormat.format(new Date(flow.updatedAt))} ·{" "}
-          {flow.lastRunAt ? `last run ${dateFormat.format(new Date(flow.lastRunAt))}` : "never run"}
-        </CardDescription>
-
-        {/* Above the stretched link, or it would be unreachable. */}
-        <CardAction className="relative z-10">
-          {isConfirmingDelete ? (
-            <span className="flex items-center gap-1.5">
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={remove.isPending}
-                onClick={() => remove.mutate()}
-                autoFocus
-              >
-                {remove.isPending ? "Deleting…" : "Delete for good"}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(false)}>
-                Cancel
-              </Button>
-            </span>
-          ) : (
-            <Button variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(true)}>
-              Delete
-            </Button>
-          )}
-        </CardAction>
-      </CardHeader>
-
-      {flow.description && <CardContent className="text-muted-foreground">{flow.description}</CardContent>}
-    </Card>
+    <div className="rounded-xl border p-5">
+      <div className="flex items-start gap-3">
+        <Skeleton className="size-9 shrink-0 rounded-lg" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-3 w-1/3" />
+        </div>
+      </div>
+      <Skeleton className="mt-6 h-3 w-full" />
+      <Skeleton className="mt-2 h-3 w-1/2" />
+    </div>
   );
 }
 
@@ -136,40 +83,60 @@ function FlowsPage() {
   });
 
   return (
-    <div className="animate-in fade-in duration-200 mx-auto w-full max-w-5xl flex-1 space-y-8 overflow-y-auto px-6 py-10">
-      <div className="space-y-1">
-        <h1 className="font-semibold text-2xl tracking-tight">Flows</h1>
-        <p className="text-muted-foreground">Everything in this workspace. Open one to edit it on the canvas.</p>
-      </div>
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="animate-in fade-in duration-200 mx-auto w-full max-w-6xl space-y-6 px-4 pt-6 pb-10 sm:px-6 sm:pt-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="font-semibold text-2xl tracking-tight">Flows</h1>
+            <p className="text-muted-foreground">Everything in this workspace. Open one to edit it on the canvas.</p>
+          </div>
 
-      <NewFlowForm />
+          <NewFlowForm />
+        </div>
 
-      {flows.isPending && <p className="text-muted-foreground">Loading…</p>}
+        {flows.isPending && (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy>
+            <span className="sr-only">Loading your flows…</span>
+            {Array.from({ length: 6 }, (_, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: placeholders have no identity to key by.
+              <FlowCardSkeleton key={index} />
+            ))}
+          </div>
+        )}
 
-      {flows.isError && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Could not load your flows</CardTitle>
-            <CardDescription>{flows.error.message}</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+        {flows.isError && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Could not load your flows</CardTitle>
+              <CardDescription>{flows.error.message}</CardDescription>
+            </CardHeader>
+            <CardHeader>
+              <Button size="sm" variant="outline" className="w-fit" onClick={() => void flows.refetch()}>
+                Try again
+              </Button>
+            </CardHeader>
+          </Card>
+        )}
 
-      {flows.data?.length === 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>No flows yet</CardTitle>
-            <CardDescription>
-              Name one above and it opens with a trigger already in place — add steps from there.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+        {flows.data?.length === 0 && (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-16 text-center">
+            <WorkflowIcon className="size-8 text-muted-foreground" aria-hidden />
+            <div className="space-y-1">
+              <p className="font-medium">No flows yet</p>
+              <p className="max-w-sm text-muted-foreground text-sm">
+                Name one above and it opens with a trigger already in place — add steps from there.
+              </p>
+            </div>
+          </div>
+        )}
 
-      <div className="space-y-3">
-        {flows.data?.map((flow) => (
-          <FlowCard key={flow.id} flow={flow} />
-        ))}
+        {flows.data && flows.data.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {flows.data.map((flow) => (
+              <FlowCard key={flow.id} flow={flow} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
