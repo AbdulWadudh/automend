@@ -1,6 +1,6 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useState } from "react";
-import { IconAction } from "@/components/ui/tooltip";
+import { IconAction } from "@/components/ui/icon-action";
 
 /** A uuid's trailing group, which is enough to tell two runs apart at a glance. */
 function lastSegment(value: string): string {

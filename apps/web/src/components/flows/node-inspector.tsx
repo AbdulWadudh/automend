@@ -11,10 +11,10 @@ import { Link } from "@tanstack/react-router";
 import { CheckIcon, CopyIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { IconAction } from "@/components/ui/icon-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { IconAction } from "@/components/ui/tooltip";
 import {
   findNode,
   isTrigger,

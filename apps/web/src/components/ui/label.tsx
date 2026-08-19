@@ -1,18 +1,16 @@
+"use client";
+
 import { Label as LabelPrimitive } from "radix-ui";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-/**
- * Radix's label rather than a bare `<label>`: it forwards clicks to the control it names even when
- * the two are not nested, which is how every field in the builder is laid out.
- */
 function Label({ className, ...props }: React.ComponentProps<typeof LabelPrimitive.Root>) {
   return (
     <LabelPrimitive.Root
       data-slot="label"
       className={cn(
-        "flex select-none items-center gap-2 font-medium text-sm leading-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50",
+        "flex items-center gap-2 text-xs/relaxed leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
         className,
       )}
       {...props}

@@ -32,9 +32,9 @@ import {
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { IconAction } from "@/components/ui/icon-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { IconAction } from "@/components/ui/tooltip";
 import { fetchOpsConsoles, lockQueueDashboard, operationsQueryKeys, unlockQueueDashboard } from "@/lib/operations-api";
 
 const { opsPassword } = config.validation;

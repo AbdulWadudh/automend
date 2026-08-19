@@ -1,7 +1,7 @@
 import { config } from "@automend/shared";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useState } from "react";
-import { IconAction } from "@/components/ui/tooltip";
+import { IconAction } from "@/components/ui/icon-action";
 
 const { payloadPreviewChars } = config.runs.dashboard;
 

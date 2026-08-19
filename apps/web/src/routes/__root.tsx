@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { webEnv } from "@/lib/env";
 
 export type RouterContext = {
@@ -19,18 +20,21 @@ const RouterDevtools = webEnv.isDev
   : () => null;
 
 /**
- * Deliberately bare. Each area brings its own frame — the public site in `_marketing`, the signed-in
- * app in `app` — because a shared header that has to know which one it is in belongs to neither.
+ * Deliberately bare of *chrome*. Each area brings its own frame — the public site in `_marketing`, the
+ * signed-in app in `app` — because a shared header that has to know which one it is in belongs to neither.
+ *
+ * `TooltipProvider` is context rather than chrome, and it has to be here: since `shadcn apply`, `Tooltip`
+ * no longer carries its own provider, and a tooltip rendered without one throws at render.
  */
 function RootLayout() {
   return (
-    <>
+    <TooltipProvider delayDuration={300}>
       <Outlet />
 
       <Suspense fallback={null}>
         <RouterDevtools position="bottom-right" />
       </Suspense>
-    </>
+    </TooltipProvider>
   );
 }
 
