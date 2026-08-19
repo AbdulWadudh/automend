@@ -1,9 +1,31 @@
 import { config } from "@automend/shared";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useRouterState } from "@tanstack/react-router";
-import { GaugeIcon, HistoryIcon, PlugIcon, WorkflowIcon } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+  ChevronsUpDownIcon,
+  GaugeIcon,
+  HistoryIcon,
+  LaptopIcon,
+  LogOutIcon,
+  MoonIcon,
+  PlugIcon,
+  SunIcon,
+  UserRoundIcon,
+  WorkflowIcon,
+} from "lucide-react";
 import type { ComponentType } from "react";
+import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -15,10 +37,10 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { authClient } from "@/lib/auth-client";
+import { authClient, signOut } from "@/lib/auth-client";
 import { fetchOpsConsoles, operationsQueryKeys } from "@/lib/operations-api";
+import { type Theme, useTheme } from "@/lib/theme";
 
 const { routes } = config.webClient;
 
@@ -130,9 +152,28 @@ function buildInitials(name: string | undefined, email: string | undefined): str
   return (email?.[0] ?? "?").toUpperCase();
 }
 
+/** The same three the profile page offers, so the two never drift into different choices. */
+const THEME_ITEMS: { value: Theme; label: string; icon: ComponentType<{ className?: string }> }[] = [
+  { value: "system", label: "System", icon: LaptopIcon },
+  { value: "light", label: "Light", icon: SunIcon },
+  { value: "dark", label: "Dark", icon: MoonIcon },
+];
+
 export function AppSidebar() {
   const isActive = useIsActive();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: session } = authClient.useSession();
+  const { theme, setTheme } = useTheme();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setIsSigningOut(true);
+    await signOut();
+    // Flow data is tenant-scoped, so it must not survive into whoever signs in next on this device.
+    queryClient.clear();
+    await navigate({ to: routes.signIn });
+  }
 
   const email = session?.user.email;
   const name = session?.user.name || email || "Signed in";
@@ -164,22 +205,62 @@ export function AppSidebar() {
         <OperationsGroup />
       </SidebarContent>
 
+      {/*
+        No separator: `SidebarFooter` already sits against the sidebar's own edge, and a rule above it
+        collapses to a stub floating beside the icon rail once the sidebar is narrow.
+      */}
       <SidebarFooter>
-        <SidebarSeparator />
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={isProfileActive} tooltip={email ?? "Profile"} size="lg">
-              <Link to={routes.profile}>
-                <Avatar className="size-6 rounded-md">
-                  {image && <AvatarImage src={image} alt="" />}
-                  <AvatarFallback className="rounded-md text-[0.625rem]">{initials}</AvatarFallback>
-                </Avatar>
-                <span className="grid min-w-0 flex-1 text-left leading-tight">
-                  <span className="truncate font-medium text-sm">{name}</span>
-                  <span className="truncate text-muted-foreground text-xs">{email}</span>
-                </span>
-              </Link>
-            </SidebarMenuButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton isActive={isProfileActive} tooltip={email ?? "Account"} size="lg">
+                  <Avatar className="size-6 rounded-md">
+                    {image && <AvatarImage src={image} alt="" />}
+                    <AvatarFallback className="rounded-md text-[0.625rem]">{initials}</AvatarFallback>
+                  </Avatar>
+                  <span className="grid min-w-0 flex-1 text-left leading-tight">
+                    <span className="truncate font-medium text-sm">{name}</span>
+                    <span className="truncate text-muted-foreground text-xs">{email}</span>
+                  </span>
+                  <ChevronsUpDownIcon className="ml-auto size-4 shrink-0 opacity-60" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+
+              {/* To the side rather than above: the footer is at the bottom, so a menu opening upward
+                  would cover the navigation somebody just came from. */}
+              <DropdownMenuContent side="right" align="end" sideOffset={8} className="w-56">
+                <DropdownMenuLabel className="truncate font-normal text-muted-foreground text-xs">
+                  {email}
+                </DropdownMenuLabel>
+
+                <DropdownMenuItem asChild>
+                  <Link to={routes.profile}>
+                    <UserRoundIcon />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuLabel className="font-normal text-muted-foreground text-xs">Theme</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={theme} onValueChange={(next) => setTheme(next as Theme)}>
+                  {THEME_ITEMS.map((item) => (
+                    <DropdownMenuRadioItem key={item.value} value={item.value}>
+                      <item.icon className="size-4" />
+                      {item.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem onSelect={handleSignOut} disabled={isSigningOut}>
+                  <LogOutIcon />
+                  {isSigningOut ? "Signing out…" : "Sign out"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
