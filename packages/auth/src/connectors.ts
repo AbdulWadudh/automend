@@ -10,7 +10,9 @@
  */
 
 import { config } from "@automend/shared";
+import type { GenericOAuthConfig } from "better-auth/plugins";
 import { genericOAuth } from "better-auth/plugins";
+import { exchangeSlackInstallCode, readSlackUserInfo } from "./slack";
 
 const { connectors } = config;
 
@@ -44,6 +46,22 @@ const profileMappers: Record<string, ((profile: Record<string, unknown>) => Reco
   discord: (profile) => ({
     ...profile,
     name: profile.global_name ?? profile.username,
+  }),
+};
+
+/**
+ * Connectors whose provider does not speak plain OAuth 2.0, and what to do instead.
+ *
+ * One entry so far. Slack's v2 install flow returns two tokens in a body that reports failure with
+ * HTTP 200, so both halves of the exchange are replaced — see `slack.ts` for why neither generic
+ * implementation can read it.
+ */
+type NonStandardFlow = Pick<GenericOAuthConfig, "getToken" | "getUserInfo">;
+
+const nonStandardFlows: Record<string, ((credentials: ConnectorCredentials) => NonStandardFlow) | undefined> = {
+  slack: (credentials) => ({
+    getToken: exchangeSlackInstallCode(credentials.clientId),
+    getUserInfo: readSlackUserInfo,
   }),
 };
 
@@ -88,6 +106,14 @@ export function createConnectorPlugin(credentials: ConnectorCredentialMap) {
         ...("prompt" in provider ? { prompt: provider.prompt } : {}),
         ...("accessType" in provider ? { accessType: provider.accessType } : {}),
         mapProfileToUser: profileMappers[provider.id],
+        // Absent unless the connector declares it, for the same reason `prompt` is: an authorization
+        // request carrying `code_challenge` at a provider that has not been opted into PKCE is
+        // rejected by some and silently ignored by others.
+        ...("pkce" in provider ? { pkce: provider.pkce } : {}),
+        // Slack splits what the app may do (`scope`) from what it may do as the installer
+        // (`user_scope`), and only the first has a place in the standard authorization request.
+        ...("userScopes" in provider ? { authorizationUrlParams: { user_scope: provider.userScopes.join(",") } } : {}),
+        ...nonStandardFlows[provider.id]?.(pair),
       },
     ];
   });

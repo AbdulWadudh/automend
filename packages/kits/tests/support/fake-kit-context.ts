@@ -63,6 +63,12 @@ export const googleOAuth: KitCredential = {
   accessToken: "test-access-token",
 };
 
+export const slackOAuth: KitCredential = {
+  kind: "oauth",
+  connectorId: "slack",
+  accessToken: "test-bot-token",
+};
+
 export type FakeContextOverrides = {
   input?: Record<string, unknown>;
   auth?: KitCredential;

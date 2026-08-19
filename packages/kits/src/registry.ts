@@ -15,6 +15,7 @@ import { type ActionDefinition, deepFreeze, type KitDefinition, type TriggerDefi
 import { coreKit } from "./core";
 import { gmailKit } from "./gmail";
 import { httpKit } from "./http";
+import { slackKit } from "./slack";
 
 /**
  * The catalogue, frozen once at module load.
@@ -23,7 +24,7 @@ import { httpKit } from "./http";
  * for weeks, and `Object.freeze` on a kit would leave its `actions` array and its properties' `options`
  * arrays mutable. A stray mutation would not fail near the bug — it would quietly change later runs.
  */
-export const kits: readonly KitDefinition[] = deepFreeze([coreKit, httpKit, gmailKit]);
+export const kits: readonly KitDefinition[] = deepFreeze([coreKit, httpKit, gmailKit, slackKit]);
 
 /**
  * Two kits sharing an id would make `findKit` return whichever came first, so a step would silently

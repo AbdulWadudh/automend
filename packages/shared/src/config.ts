@@ -480,19 +480,35 @@ export const config = {
         id: "slack",
         label: "Slack",
         kind: "oauth",
-        summary: "Identify a Slack workspace account.",
+        summary: "Post messages to a Slack workspace.",
         /**
-         * Slack's OpenID Connect endpoints, not its v2 app-install ones.
+         * Bot scopes, sent as `scope`. A step acts as the app rather than as whoever installed it,
+         * so the token a kit is handed is the bot token — which is what makes a flow keep working
+         * after the person who authorised it leaves the workspace.
          *
-         * Installing a Slack app for `chat:write` returns a *bot* token and no user-info endpoint,
-         * so it cannot satisfy the identity the callback requires. Posting as a bot therefore
-         * needs its own install flow, which is not built — see the changelog. Promising
-         * `chat:write` here would produce a connector that fails the moment anyone used it.
+         * `chat:write.public` is what lets the app post to a public channel it was never invited
+         * to; without it every target channel needs a manual `/invite` first.
+         *
+         * Nothing broader, even though widening later forces every workspace to re-authorise: a
+         * scope no action uses is one nobody can point at a step to justify.
          */
-        scopes: ["openid", "email", "profile"],
-        authorizationUrl: "https://slack.com/openid/connect/authorize",
-        tokenUrl: "https://slack.com/api/openid.connect.token",
+        scopes: ["chat:write", "chat:write.public"],
+        /**
+         * User scopes, sent as `user_scope` and used for nothing but identity.
+         *
+         * The v2 install response carries no email, and the callback refuses a connection without
+         * one. These buy a *user* token that `openid.connect.userInfo` will answer for; it is read
+         * once during the callback and never stored — see `packages/auth/src/slack.ts`.
+         */
+        userScopes: ["openid", "email", "profile"],
+        authorizationUrl: "https://slack.com/oauth/v2/authorize",
+        tokenUrl: "https://slack.com/api/oauth.v2.access",
         userInfoUrl: "https://slack.com/api/openid.connect.userInfo",
+        /**
+         * Required, not defensive: the app is opted into PKCE in Slack's own settings, and once it
+         * is, Slack rejects an authorization request that carries no `code_challenge`.
+         */
+        pkce: true,
       },
       {
         id: "google",
@@ -1148,6 +1164,17 @@ export const config = {
     },
     emailBody: {
       maxLength: 50_000,
+    },
+    slackChannel: {
+      maxLength: 200,
+    },
+    /** Slack truncates a message above 40,000 characters; there is no point accepting more. */
+    slackMessage: {
+      maxLength: 40_000,
+    },
+    /** `1735689600.000100` — but it may be a template, so this is generous rather than exact. */
+    slackTimestamp: {
+      maxLength: 200,
     },
     webhookPath: {
       minLength: 1,

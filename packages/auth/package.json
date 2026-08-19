@@ -16,6 +16,7 @@
     "@automend/db": "workspace:*",
     "@automend/shared": "workspace:*",
     "better-auth": "^1.6.29",
+    "zod": "^4.1.13",
     "drizzle-orm": "^0.44.7"
   },
   "devDependencies": {

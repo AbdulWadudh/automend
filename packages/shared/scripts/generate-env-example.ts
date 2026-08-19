@@ -125,7 +125,7 @@ const sections: EnvSection[] = [
       [
         "SLACK_CLIENT_ID",
         "",
-        `Redirect URI: ${localDev.urls.webDev}${auth.basePath}/oauth2/callback/slack${connectors.connectionProviderSuffix}`,
+        `Redirect URI: ${localDev.urls.webDev}${auth.basePath}/oauth2/callback/slack${connectors.connectionProviderSuffix} (the app must also be opted into PKCE)`,
       ],
       ["SLACK_CLIENT_SECRET", ""],
       [

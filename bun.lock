@@ -109,6 +109,7 @@
         "@automend/shared": "workspace:*",
         "better-auth": "^1.6.29",
         "drizzle-orm": "^0.44.7",
+        "zod": "^4.1.13",
       },
       "devDependencies": {
         "typescript": "^5.9.3",
