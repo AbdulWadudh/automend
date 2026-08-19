@@ -31,7 +31,20 @@ export const flowSchema = z.object({
 
 export type Flow = z.infer<typeof flowSchema>;
 
-export const flowListSchema = z.array(flowSchema);
+/**
+ * A flow as the listing shows it.
+ *
+ * `lastRunAt` is on the list item rather than on `flowSchema` because create and update return the row
+ * they wrote, and a subquery over `flow_runs` is not part of that row — putting it on the base schema
+ * would oblige every write to invent a value for it.
+ */
+export const flowListItemSchema = flowSchema.extend({
+  lastRunAt: z.iso.datetime().nullable(),
+});
+
+export type FlowListItem = z.infer<typeof flowListItemSchema>;
+
+export const flowListSchema = z.array(flowListItemSchema);
 
 /**
  * `limit` has no default: absent means every flow, which is what the flows page has always asked for.

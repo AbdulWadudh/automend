@@ -9,6 +9,7 @@ import {
   type CreateFlowRequest,
   type Flow,
   type FlowDelivery,
+  type FlowListItem,
   type FlowListQuery,
   flowDeliveryListSchema,
   flowListSchema,
@@ -29,7 +30,7 @@ export const flowQueryKeys = {
   deliveries: (flowId: string) => [...flowQueryKeys.all, "deliveries", flowId] as const,
 };
 
-export async function listFlows(query: FlowListQuery = {}, signal?: AbortSignal): Promise<Flow[]> {
+export async function listFlows(query: FlowListQuery = {}, signal?: AbortSignal): Promise<FlowListItem[]> {
   const search = new URLSearchParams();
 
   if (query.search) {

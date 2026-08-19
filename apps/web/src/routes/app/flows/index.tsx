@@ -1,4 +1,4 @@
-import { config, type Flow } from "@automend/shared";
+import { config, type Flow, type FlowListItem } from "@automend/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
@@ -64,7 +64,7 @@ function NewFlowForm() {
   );
 }
 
-function FlowCard({ flow }: { flow: Flow }) {
+function FlowCard({ flow }: { flow: FlowListItem }) {
   const queryClient = useQueryClient();
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
@@ -78,22 +78,29 @@ function FlowCard({ flow }: { flow: Flow }) {
   });
 
   return (
-    <Card>
+    <Card className="relative transition hover:-translate-y-px hover:bg-muted/30">
       <CardHeader>
         <CardTitle>
+          {/*
+            One real link, stretched over the card with `after:inset-0`, rather than a link per region
+            or a click handler on the card: the whole surface becomes the target while there is still
+            exactly one thing in the tab order that says where it goes.
+          */}
           <Link
             to={routes.flowDetail}
             params={{ flowId: flow.id }}
-            className="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
+            className="rounded-sm after:absolute after:inset-0 hover:underline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
           >
             {flow.name}
           </Link>
         </CardTitle>
         <CardDescription>
-          {describeSize(flow)} · edited {dateFormat.format(new Date(flow.updatedAt))}
+          {describeSize(flow)} · edited {dateFormat.format(new Date(flow.updatedAt))} ·{" "}
+          {flow.lastRunAt ? `last run ${dateFormat.format(new Date(flow.lastRunAt))}` : "never run"}
         </CardDescription>
 
-        <CardAction>
+        {/* Above the stretched link, or it would be unreachable. */}
+        <CardAction className="relative z-10">
           {isConfirmingDelete ? (
             <span className="flex items-center gap-1.5">
               <Button

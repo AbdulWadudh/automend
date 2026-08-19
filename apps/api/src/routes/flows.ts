@@ -105,7 +105,10 @@ export function createFlowRoutes(deps: ApiDependencies): Hono<SessionEnv> {
     const query = parseQuery(c, flowListQuerySchema);
     const rows = await listFlowsForTenant(deps.db, tenantId, { search: query.search, limit: query.limit });
 
-    return respondWithData(c, rows.map(toFlowResponse));
+    return respondWithData(
+      c,
+      rows.map((row) => ({ ...toFlowResponse(row), lastRunAt: row.lastRunAt?.toISOString() ?? null })),
+    );
   });
 
   routes.post("/", async (c) => {

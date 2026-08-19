@@ -18,7 +18,7 @@ export {
   updateConnectionSecretForTenant,
   upsertOAuthConnection,
 } from "./connections";
-export type { InsertFlowValues, ListFlowsOptions, UpdateFlowValues } from "./flows";
+export type { FlowListRow, InsertFlowValues, ListFlowsOptions, UpdateFlowValues } from "./flows";
 export {
   deleteFlowForTenant,
   findFlowForTenant,

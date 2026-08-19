@@ -59,6 +59,13 @@ describeWithDatabase("searching a workspace's flows", () => {
     expect(await search("Order_intake")).toEqual([]);
   });
 
+  /** The listing carries it so the flows page can say when a flow last did anything. */
+  test("a flow that has never run reports no last run", async () => {
+    const rows = await listFlowsForTenant(context.db, context.tenantId);
+
+    expect(rows.every((row) => row.lastRunAt === null)).toBe(true);
+  });
+
   test("the limit bounds what comes back", async () => {
     const limited = await listFlowsForTenant(context.db, context.tenantId, { limit: 2 });
 

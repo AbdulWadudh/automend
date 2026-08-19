@@ -14,9 +14,9 @@
 
 import { upgradeFlowDefinition } from "@automend/kits";
 import type { FlowDefinition } from "@automend/shared";
-import { and, desc, eq, ilike } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, ilike, sql } from "drizzle-orm";
 import type { Database } from "./client";
-import { type FlowRow, flows } from "./schema";
+import { type FlowRow, flowRuns, flows } from "./schema";
 
 /**
  * A stored row with its definition brought up to date.
@@ -53,11 +53,21 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
+export type FlowListRow = FlowRow & { lastRunAt: Date | null };
+
+/**
+ * Correlated rather than a join and a `group by`: a join would multiply each flow by its runs and force
+ * every other column into the grouping, for one value.
+ */
+const lastRunAtColumn = sql<Date | null>`(
+  select max(${flowRuns.createdAt}) from ${flowRuns} where ${flowRuns.flowId} = ${flows.id}
+)`;
+
 export async function listFlowsForTenant(
   db: Database,
   tenantId: string,
   options: ListFlowsOptions = {},
-): Promise<FlowRow[]> {
+): Promise<FlowListRow[]> {
   const conditions = [eq(flows.tenantId, tenantId)];
 
   if (options.search) {
@@ -65,14 +75,14 @@ export async function listFlowsForTenant(
   }
 
   const query = db
-    .select()
+    .select({ ...getTableColumns(flows), lastRunAt: lastRunAtColumn })
     .from(flows)
     .where(and(...conditions))
     .orderBy(desc(flows.updatedAt));
 
   const rows = await (options.limit === undefined ? query : query.limit(options.limit));
 
-  return rows.map(withCurrentDefinition);
+  return rows.map((row) => ({ ...withCurrentDefinition(row), lastRunAt: row.lastRunAt }));
 }
 
 export async function findFlowForTenant(db: Database, tenantId: string, flowId: string): Promise<FlowRow | undefined> {
