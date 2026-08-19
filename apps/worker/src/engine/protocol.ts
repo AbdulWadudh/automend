@@ -77,10 +77,28 @@ export const runStepCommandSchema = z.object({
   credential: engineCredentialSchema.nullable(),
 });
 
-export const engineCommandSchema = z.discriminatedUnion("type", [engineHelloSchema, runStepCommandSchema]);
+/**
+ * The parent's answer to a token request.
+ *
+ * The waiting happens in the parent, so the child simply awaits this. `granted: false` means the bucket could
+ * not free a token inside the step's budget, and the message is what the run's journal will say.
+ */
+export const rateLimitGrantSchema = z.object({
+  type: z.literal("rateLimitGrant"),
+  requestId: z.string(),
+  granted: z.boolean(),
+  message: z.string().nullable(),
+});
+
+export const engineCommandSchema = z.discriminatedUnion("type", [
+  engineHelloSchema,
+  runStepCommandSchema,
+  rateLimitGrantSchema,
+]);
 
 export type EngineHello = z.infer<typeof engineHelloSchema>;
 export type RunStepCommand = z.infer<typeof runStepCommandSchema>;
+export type RateLimitGrant = z.infer<typeof rateLimitGrantSchema>;
 export type EngineCommand = z.infer<typeof engineCommandSchema>;
 
 /**
@@ -107,10 +125,29 @@ export const stepResultSchema = z.object({
   error: z.object({ code: z.string(), message: z.string() }).nullable(),
 });
 
-export const engineMessageSchema = z.discriminatedUnion("type", [engineLogSchema, stepResultSchema]);
+/**
+ * A kit is about to make a request and needs a token first.
+ *
+ * It names no bucket. Which one this draws from is decided by the parent from the step it is running, so a kit
+ * cannot spend another connection's quota — the same reason the child is given one credential rather than the
+ * means to fetch any.
+ */
+export const rateLimitRequestSchema = z.object({
+  type: z.literal("rateLimitRequest"),
+  requestId: z.string(),
+  /** The step this request belongs to, so a late one cannot be attributed to the step that followed it. */
+  commandId: z.string(),
+});
+
+export const engineMessageSchema = z.discriminatedUnion("type", [
+  engineLogSchema,
+  stepResultSchema,
+  rateLimitRequestSchema,
+]);
 
 export type EngineLog = z.infer<typeof engineLogSchema>;
 export type StepResult = z.infer<typeof stepResultSchema>;
+export type RateLimitRequest = z.infer<typeof rateLimitRequestSchema>;
 export type EngineMessage = z.infer<typeof engineMessageSchema>;
 
 /** The limits as the parent configures them, from config rather than from anything a flow can influence. */

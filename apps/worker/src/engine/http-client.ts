@@ -115,8 +115,16 @@ function parseBody(text: string, contentType: string | null): unknown {
   }
 }
 
-export function createGuardedHttpClient(limits: EngineLimits): HttpClient {
+/**
+ * `acquireToken` is awaited once per call a kit makes, not once per redirect hop: a kit that asks for one
+ * thing has spent one request against the service's quota, whatever the number of hops it took to answer.
+ */
+export function createGuardedHttpClient(limits: EngineLimits, acquireToken?: () => Promise<void>): HttpClient {
   async function request(input: HttpRequest): Promise<HttpResponse> {
+    if (acquireToken) {
+      await acquireToken();
+    }
+
     const bodyParts = buildBody(input);
     let target = buildUrl(input);
 

@@ -20,6 +20,7 @@
  * pipe does not start on Windows — see `channel.ts` for the failure and what it buys us.
  */
 
+import type { KitRateLimit } from "@automend/kit-framework";
 import { config } from "@automend/shared";
 import type { Logger } from "@automend/shared/logger";
 import { createLineReader, decodeMessage, encodeMessage } from "./channel";
@@ -28,8 +29,10 @@ import {
   type EngineLimits,
   type EngineMessage,
   engineMessageSchema,
+  type RateLimitRequest,
   type StepResult,
 } from "./protocol";
+import type { RateLimiter } from "./rate-limiter";
 
 /**
  * Resolved from this module rather than assembled by a caller, so nothing can point it elsewhere.
@@ -53,6 +56,8 @@ export type StepInvocation = {
   stepName: string;
   input: Record<string, unknown>;
   credential: EngineCredential | null;
+  /** The bucket this step's requests draw from, and how big it is. Absent for a kit that declares no limit. */
+  rateLimit: { key: string; limit: KitRateLimit } | null;
 };
 
 export type StepOutcome =
@@ -91,12 +96,16 @@ export type CreateStepHostOptions = {
   run: RunContext;
   limits: EngineLimits;
   logger: Logger;
+  /** Absent on a deployment with no Redis reachable from the worker, which leaves kits unthrottled. */
+  limiter?: RateLimiter;
 };
 
-export function createStepHost({ run, limits, logger }: CreateStepHostOptions): StepHost {
+export function createStepHost({ run, limits, logger, limiter }: CreateStepHostOptions): StepHost {
   const { engine } = config;
   /** Resolvers for commands still in flight, keyed by the id that correlates the reply. */
   const pending = new Map<string, (result: StepResult) => void>();
+  /** Which bucket each in-flight step draws from. The child names a step, never a bucket. */
+  const buckets = new Map<string, { key: string; limit: KitRateLimit }>();
   let closed = false;
 
   function handleMessage(raw: unknown): void {
@@ -109,6 +118,12 @@ export function createStepHost({ run, limits, logger }: CreateStepHostOptions): 
     }
 
     const message: EngineMessage = parsed.data;
+
+    if (message.type === "rateLimitRequest") {
+      void grantToken(message);
+
+      return;
+    }
 
     if (message.type === "log") {
       // Folded into the worker's own structured logging, attributed to the step that produced it.
@@ -131,7 +146,44 @@ export function createStepHost({ run, limits, logger }: CreateStepHostOptions): 
     }
 
     pending.delete(message.commandId);
+    buckets.delete(message.commandId);
     resolve(message);
+  }
+
+  /**
+   * Waits for the step's bucket, then tells the child to go.
+   *
+   * The wait happens here rather than in the child because the bucket is shared: it is Redis-backed so that
+   * every worker replica draws from the same one, and the child holds no Redis connection by design.
+   *
+   * A step whose bucket the parent no longer knows — because the step already timed out — is refused rather
+   * than granted, so a late request cannot spend the next step's quota.
+   */
+  async function grantToken(request: RateLimitRequest): Promise<void> {
+    const bucket = buckets.get(request.commandId);
+
+    if (!limiter || !bucket) {
+      send({
+        type: "rateLimitGrant",
+        requestId: request.requestId,
+        granted: limiter === undefined,
+        message: limiter === undefined ? null : "This step is no longer running",
+      });
+
+      return;
+    }
+
+    try {
+      await limiter.acquire(bucket.key, bucket.limit, config.kits.limits.waitBudgetMs);
+      send({ type: "rateLimitGrant", requestId: request.requestId, granted: true, message: null });
+    } catch (error) {
+      send({
+        type: "rateLimitGrant",
+        requestId: request.requestId,
+        granted: false,
+        message: error instanceof Error ? error.message : "This step could not get a rate-limit token",
+      });
+    }
   }
 
   // `bun <file>`, not `bun run <file>`: the latter resolves through the package manifest, which is a step this
@@ -243,6 +295,7 @@ export function createStepHost({ run, limits, logger }: CreateStepHostOptions): 
     }
 
     pending.clear();
+    buckets.clear();
 
     // stdin is closed first so a child between steps sees the stream end and exits on its own, rather than being
     // killed mid-write.
@@ -287,12 +340,18 @@ export function createStepHost({ run, limits, logger }: CreateStepHostOptions): 
     }
 
     const commandId = crypto.randomUUID();
+    const { rateLimit, ...command } = invocation;
 
     const answered = new Promise<StepResult>((resolve) => {
       pending.set(commandId, resolve);
     });
 
-    send({ type: "runStep", commandId, ...invocation });
+    if (rateLimit) {
+      buckets.set(commandId, rateLimit);
+    }
+
+    // `rateLimit` is deliberately not sent: the child asks for tokens, it does not get to say from where.
+    send({ type: "runStep", commandId, ...command });
 
     /**
      * The per-step ceiling, which the spawn's own `timeout` cannot express — that one bounds the whole run.
@@ -306,6 +365,7 @@ export function createStepHost({ run, limits, logger }: CreateStepHostOptions): 
 
     if (settled === "timeout") {
       pending.delete(commandId);
+      buckets.delete(commandId);
       logger.warn({ runId: run.id, step: invocation.stepName }, "step exceeded its time limit");
       await close();
 

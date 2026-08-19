@@ -34,6 +34,22 @@ export function kitToken(spec: { connectorId: ConnectorId }): KitAuthRequirement
   return { kind: "token", connectorId: spec.connectorId };
 }
 
+/**
+ * What the service will accept from one account, which is the shape a published quota comes in.
+ *
+ * Declared rather than configured, because the number belongs to the service and a kit author is the one
+ * reading its documentation. The engine keys the bucket by *connection*, so this is a per-account budget:
+ * a workspace with two Google connections gets two of these, which is what Google itself grants.
+ */
+export type KitRateLimit = {
+  readonly requests: number;
+  readonly perSeconds: number;
+};
+
+export function kitRateLimit(spec: { requests: number; perSeconds: number }): KitRateLimit {
+  return { requests: spec.requests, perSeconds: spec.perSeconds };
+}
+
 export type CreateKitSpec = {
   /** camelCase and globally unique — `gmail`, `googleSheets`. Stored in every flow that uses it. */
   id: string;
@@ -41,6 +57,8 @@ export type CreateKitSpec = {
   description: string;
   /** Absent for a kit that needs no credentials, like `core` and `http`. */
   auth?: KitAuthRequirement;
+  /** Absent means unthrottled, which is the honest default for a kit whose service publishes no quota. */
+  limits?: KitRateLimit;
   actions?: readonly ActionDefinition[];
   triggers?: readonly TriggerDefinition[];
 };
@@ -50,6 +68,7 @@ export type KitDefinition = {
   readonly displayName: string;
   readonly description: string;
   readonly auth: KitAuthRequirement | undefined;
+  readonly limits: KitRateLimit | undefined;
   readonly actions: readonly ActionDefinition[];
   readonly triggers: readonly TriggerDefinition[];
 };
@@ -96,11 +115,29 @@ function assertDropdownsHaveOptions(owner: string, props: ActionDefinition["prop
   }
 }
 
+/** A limit of zero requests would stop the kit dead, and a fractional one is a typo. */
+function assertLimitsAreUsable(kitId: string, limits: KitRateLimit | undefined): void {
+  if (!limits) {
+    return;
+  }
+
+  const usable =
+    Number.isInteger(limits.requests) &&
+    limits.requests > 0 &&
+    Number.isFinite(limits.perSeconds) &&
+    limits.perSeconds > 0;
+
+  if (!usable) {
+    throw new Error(`Kit "${kitId}" declares an unusable rate limit — requests and perSeconds must both be above zero`);
+  }
+}
+
 export function createKit(spec: CreateKitSpec): KitDefinition {
   const actions = spec.actions ?? [];
   const triggers = spec.triggers ?? [];
 
   assertName("Kit id", spec.id);
+  assertLimitsAreUsable(spec.id, spec.limits);
   assertUniqueNames(
     "Action",
     actions.map((action) => action.name),
@@ -125,6 +162,7 @@ export function createKit(spec: CreateKitSpec): KitDefinition {
     displayName: spec.displayName,
     description: spec.description,
     auth: spec.auth,
+    limits: spec.limits,
     actions,
     triggers,
   };

@@ -713,6 +713,31 @@ export const config = {
      * out of the database. A second copy is how a stored flow comes to name something no kit could be.
      */
     namePattern: "^[a-z][a-zA-Z0-9]*$",
+
+    /**
+     * What the engine does with a rate limit a kit declares.
+     *
+     * The bucket lives in Redis and is keyed by *connection*, not by kit: a service's quota belongs to the
+     * account being acted as, so two Google connections in one workspace must not throttle each other, and
+     * two workspaces must not throttle each other at all.
+     */
+    limits: {
+      /** Half a step's own budget, so waiting for a token can never use up the time meant for the work. */
+      waitBudgetMs: Math.floor(ENGINE_STEP_TIMEOUT_MS / 2),
+      /**
+       * A wait longer than this re-checks rather than sleeping it out: the bucket refills predictably, but
+       * another worker may take the token first, so the computed wait is a floor rather than a promise.
+       */
+      recheckIntervalCapMs: 1_000,
+      /**
+       * Redis key prefix. The hashtag goes around the *bucket's* identity rather than the prefix, so
+       * Dragonfly locks one bucket at a time instead of putting every limiter on one thread — the opposite
+       * of what queue names need, and for the same reason.
+       */
+      keyPrefix: "kit-limit",
+      /** An idle bucket is kept for this many refill periods before Redis reclaims it. */
+      bucketTtlPeriods: 2,
+    },
     /**
      * How much text a step's field may hold, by shape of field.
      *

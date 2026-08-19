@@ -18,12 +18,34 @@
 
 import type { ClaimStepValues, Database, StepClaim } from "@automend/db";
 import { claimStepRun, completeStepRun, findSucceededStepOutputs, recordSkippedStep } from "@automend/db";
-import { findAction } from "@automend/kits";
+import type { KitRateLimit } from "@automend/kit-framework";
+import { findAction, findKit } from "@automend/kits";
 import type { FlowDefinition, FlowStepNode, RunError } from "@automend/shared";
 import type { Logger } from "@automend/shared/logger";
 import type { EngineCredential } from "./protocol";
+import { buildLimiterKey } from "./rate-limiter";
 import { buildResolutionContext, buildStepVariableKeys, resolveStepInput, withStepOutput } from "./resolve-input";
 import type { RunContext, StepHost } from "./step-host";
+
+/**
+ * Which bucket this step's requests draw from.
+ *
+ * Keyed by the connection rather than the kit, because a quota belongs to the account being acted as: two
+ * Google connections in one workspace are two budgets, and two workspaces share none. A kit with no declared
+ * limit is unthrottled, which is the honest state rather than an invented number.
+ */
+function buildStepRateLimit(run: RunContext, step: FlowStepNode): { key: string; limit: KitRateLimit } | null {
+  const limit = findKit(step.kitId)?.limits;
+
+  if (!limit) {
+    return null;
+  }
+
+  return {
+    key: buildLimiterKey({ tenantId: run.tenantId, kitId: step.kitId, connectionId: step.connectionId }),
+    limit,
+  };
+}
 
 export type ExecutionOutcome = {
   status: "succeeded" | "failed";
@@ -233,6 +255,7 @@ export async function executeFlow(options: ExecuteFlowOptions): Promise<Executio
       stepName: step.name,
       input: resolution.resolved.input,
       credential: credentials.get(step.id) ?? null,
+      rateLimit: buildStepRateLimit(run, step),
     });
 
     if (result.outcome === "succeeded") {

@@ -7,7 +7,7 @@
  * cannot keep.
  */
 
-import { createKit, kitOAuth } from "@automend/kit-framework";
+import { createKit, kitOAuth, kitRateLimit } from "@automend/kit-framework";
 import { gmailSendEmailAction } from "./actions/send-email";
 import { gmailNewEmailTrigger } from "./triggers/new-email";
 
@@ -19,6 +19,11 @@ export const gmailKit = createKit({
     connectorId: "google",
     scopes: ["https://www.googleapis.com/auth/gmail.send"],
   }),
+  /**
+   * Gmail allows 250 quota units per user per second, and `messages.send` costs 100 of them — so two
+   * sends a second is what one connected account is actually granted, not a number chosen here.
+   */
+  limits: kitRateLimit({ requests: 2, perSeconds: 1 }),
   actions: [gmailSendEmailAction],
   triggers: [gmailNewEmailTrigger],
 });

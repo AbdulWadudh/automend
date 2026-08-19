@@ -29,6 +29,7 @@ import {
   type EngineLog,
   type EngineMessage,
   engineCommandSchema,
+  type RateLimitGrant,
   type RunStepCommand,
 } from "./protocol";
 
@@ -108,6 +109,34 @@ function describeError(error: unknown): { code: string; message: string } {
   return { code: API_ERROR_CODES.STEP_EXECUTION_FAILED, message: String(error) };
 }
 
+/** Grants still in flight, keyed by the id that correlates the reply. */
+const pendingTokens = new Map<string, (grant: RateLimitGrant) => void>();
+
+/**
+ * Waits for the parent to say a request may go ahead.
+ *
+ * The bucket is Redis-backed and shared by every worker, and this process holds no Redis connection — by
+ * design, since it holds no credentials either. So the wait happens on the other side of the pipe and this
+ * only awaits the answer.
+ */
+function requestToken(commandId: string): Promise<void> {
+  const requestId = crypto.randomUUID();
+
+  return new Promise<void>((resolve, reject) => {
+    pendingTokens.set(requestId, (grant) => {
+      if (grant.granted) {
+        resolve();
+
+        return;
+      }
+
+      reject(new Error(grant.message ?? "This step was refused a rate-limit token"));
+    });
+
+    send({ type: "rateLimitRequest", requestId, commandId });
+  });
+}
+
 async function runStep(command: RunStepCommand, current: ChildState): Promise<void> {
   const action = findAction(command.kitId, command.actionName);
 
@@ -132,7 +161,7 @@ async function runStep(command: RunStepCommand, current: ChildState): Promise<vo
     const output = await action.invoke({
       input: command.input,
       auth: (command.credential ?? undefined) as KitCredential | undefined,
-      http: createGuardedHttpClient(current.limits),
+      http: createGuardedHttpClient(current.limits, () => requestToken(command.commandId)),
       store: createRefusingStore(command.stepName),
       run: current.run,
       step: { name: command.stepName },
@@ -172,6 +201,15 @@ function handleCommand(raw: unknown): void {
 
   if (command.type === "hello") {
     state = { run: command.run, limits: command.limits };
+
+    return;
+  }
+
+  if (command.type === "rateLimitGrant") {
+    const settle = pendingTokens.get(command.requestId);
+
+    pendingTokens.delete(command.requestId);
+    settle?.(command);
 
     return;
   }

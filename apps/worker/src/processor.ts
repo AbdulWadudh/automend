@@ -35,6 +35,7 @@ import { resolveRunCredentials } from "./credentials";
 import type { WorkerDependencies } from "./dependencies";
 import { executeFlow } from "./engine/executor";
 import { buildEngineLimits } from "./engine/protocol";
+import { createRateLimiter } from "./engine/rate-limiter";
 import { createStepHost } from "./engine/step-host";
 
 /**
@@ -179,7 +180,12 @@ export function createFlowExecutionProcessor(deps: WorkerDependencies): FlowExec
     // Derived from the journal rather than from BullMQ's `attemptsMade`, because the two can disagree: a job can be
     // handed to a second worker after a stall without its attempt count moving.
     const attempt = await nextAttemptForRun(db, runId);
-    const host = createStepHost({ run, limits: buildEngineLimits(deps.allowPrivateNetwork), logger });
+    const host = createStepHost({
+      run,
+      limits: buildEngineLimits(deps.allowPrivateNetwork),
+      logger,
+      limiter: createRateLimiter({ redis: deps.redis }),
+    });
 
     logger.info({ runId, flowId: run.flowId, attempt, steps: definition.steps.length }, "executing flow");
 

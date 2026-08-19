@@ -32,8 +32,8 @@ export { deepFreeze } from "./freeze";
 export type { HttpClient, HttpMethod, HttpRequest, HttpResponse, KitLogger } from "./http";
 export type { InputSchema } from "./input-schema";
 export { buildResolvedInputSchema, buildStoredInputSchema, describeInputIssues } from "./input-schema";
-export type { CreateKitSpec, KitAuthRequirement, KitDefinition } from "./kit";
-export { createKit, KIT_NAME_PATTERN, kitOAuth, kitToken } from "./kit";
+export type { CreateKitSpec, KitAuthRequirement, KitDefinition, KitRateLimit } from "./kit";
+export { createKit, KIT_NAME_PATTERN, kitOAuth, kitRateLimit, kitToken } from "./kit";
 export type {
   CheckboxProperty,
   DropdownOption,
