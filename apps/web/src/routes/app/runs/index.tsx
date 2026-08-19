@@ -204,6 +204,7 @@ function RunsPage() {
             runId={openRunId}
             className="min-h-0 flex-1 px-5 py-5"
             headingClass="truncate font-semibold text-lg tracking-tight"
+            onRunStarted={openRun}
           />
         </aside>
       </ResizablePanel>

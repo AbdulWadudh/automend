@@ -27,7 +27,15 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RunHeader({ run, headingClass }: { run: FlowRunDetail; headingClass: string }) {
+function RunHeader({
+  run,
+  headingClass,
+  onRunStarted,
+}: {
+  run: FlowRunDetail;
+  headingClass: string;
+  onRunStarted?: (runId: string) => void;
+}) {
   const durationMs = runDurationMs(run);
   const failedSteps = run.steps.filter((step) => step.status === "failed").length;
 
@@ -66,7 +74,7 @@ function RunHeader({ run, headingClass }: { run: FlowRunDetail; headingClass: st
           </div>
         </div>
 
-        <RetriggerButton runId={run.id} status={run.status} retries={run.retries} />
+        <RetriggerButton runId={run.id} status={run.status} retries={run.retries} onStarted={onRunStarted} />
       </div>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-muted/30 px-3 py-2.5 ring-1 ring-foreground/10 sm:grid-cols-4 sm:gap-4 sm:px-4 sm:py-3">
@@ -108,11 +116,14 @@ export function RunDetail({
   runId,
   className,
   headingClass = "truncate font-semibold text-xl tracking-tight sm:text-2xl",
+  onRunStarted,
 }: {
   runId: string;
   /** Where this panel's height comes from: bounded by the caller, the timeline scrolls; unbounded, it does not. */
   className?: string;
   headingClass?: string;
+  /** Given one, running it again swaps this panel to the new run instead of navigating away from the frame. */
+  onRunStarted?: (runId: string) => void;
 }) {
   const run = useQuery({
     queryKey: runQueryKeys.detail(runId),
@@ -154,7 +165,7 @@ export function RunDetail({
           scrolling to a later step must not carry the status, the ids and the failure off the screen you
           are reading the step against. */}
       <div className="shrink-0 pb-5 sm:pb-8">
-        <RunHeader run={run.data} headingClass={headingClass} />
+        <RunHeader run={run.data} headingClass={headingClass} onRunStarted={onRunStarted} />
       </div>
 
       <section className="flex min-h-0 flex-1 flex-col">

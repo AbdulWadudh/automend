@@ -75,7 +75,15 @@ function RunRow({ run, isOpen, onOpen }: { run: RunListItem; isOpen: boolean; on
       <span className="relative z-10 flex items-center justify-between gap-3 sm:justify-end">
         <CopyableId label="Run" value={run.id} short />
 
-        <RetriggerButton runId={run.id} status={run.status} retries={run.retries} size="xs" variant="ghost" />
+        {/* The new run opens the same way clicking the row does — beside the feed, not instead of it. */}
+        <RetriggerButton
+          runId={run.id}
+          status={run.status}
+          retries={run.retries}
+          size="xs"
+          variant="ghost"
+          onStarted={onOpen}
+        />
       </span>
     </li>
   );

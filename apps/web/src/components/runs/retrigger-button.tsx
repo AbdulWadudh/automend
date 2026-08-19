@@ -26,6 +26,7 @@ export type RetriggerButtonProps = {
   retries: RunRetrySummary;
   size?: "xs" | "sm";
   variant?: "outline" | "ghost" | "default";
+  onStarted?: (runId: string) => void;
 };
 
 /**
@@ -34,7 +35,14 @@ export type RetriggerButtonProps = {
  * Hidden rather than disabled while the run is unfinished: the API refuses it, and an always-visible
  * control that is dead half the time trains people to ignore it.
  */
-export function RetriggerButton({ runId, status, retries, size = "sm", variant = "outline" }: RetriggerButtonProps) {
+export function RetriggerButton({
+  runId,
+  status,
+  retries,
+  size = "sm",
+  variant = "outline",
+  onStarted,
+}: RetriggerButtonProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -54,7 +62,11 @@ export function RetriggerButton({ runId, status, retries, size = "sm", variant =
         queryClient.invalidateQueries({ queryKey: runQueryKeys.all }),
         queryClient.invalidateQueries({ queryKey: flowQueryKeys.all }),
       ]);
-      await navigate({ to: routes.runDetail, params: { [runIdParam]: started.runId } });
+      if (onStarted) {
+        onStarted(started.runId);
+      } else {
+        await navigate({ to: routes.runDetail, params: { [runIdParam]: started.runId } });
+      }
 
       toast.success(started.duplicate ? "That run was already started" : "Started a new run", {
         description: started.duplicate ? "Opened the one it resolved to." : "Running with the same data as before.",
