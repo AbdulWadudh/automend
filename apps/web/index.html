@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/logo.ico" sizes="any" />
     <link rel="apple-touch-icon" href="/logo.webp" />
-    <meta name="theme-color" content="#0a0a0a" />
+    <!-- Browser chrome follows the system preference; one fixed value leaves it wrong in one theme. -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
     <meta
       name="description"
       content="Automend is a self-hosted workflow automation platform with AI steps. Build flows visually and run them on your own infrastructure — your data, your model keys."

@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/app/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
 import { buildSignInSearch } from "@/lib/redirects";
+import { readSidebarOpen } from "@/lib/sidebar-state";
 
 const { routes } = config.webClient;
 
@@ -23,7 +24,7 @@ const { routes } = config.webClient;
  */
 function AppLayout() {
   return (
-    <SidebarProvider className="h-dvh min-h-0 overflow-hidden">
+    <SidebarProvider defaultOpen={readSidebarOpen()} className="h-dvh min-h-0 overflow-hidden">
       <AppSidebar />
 
       <SidebarInset className="min-h-0 overflow-hidden">

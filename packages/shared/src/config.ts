@@ -1224,6 +1224,17 @@ export const config = {
       storageKey: "automend.theme",
       darkClass: "dark",
     },
+    /**
+     * The sidebar remembers whether it is collapsed.
+     *
+     * The shadcn component already *writes* this cookie on every toggle; nothing read it back, because
+     * that is a server-side step in Next.js and this is a single-page app. So the name mirrors the
+     * constant inside `components/ui/sidebar.tsx`, and `tests/sidebar-state.test.ts` fails if the
+     * vendored file is regenerated with a different one.
+     */
+    sidebar: {
+      cookieName: "sidebar_state",
+    },
     defaultApiBasePath: API_BASE_PATH,
     queryStaleTimeMs: 10_000,
     queryRetryCount: 1,

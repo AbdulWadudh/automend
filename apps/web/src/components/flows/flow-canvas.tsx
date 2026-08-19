@@ -28,6 +28,7 @@ import {
   findTriggerTarget,
   pickDefaultConnection,
 } from "@/lib/kits-api";
+import { useTheme } from "@/lib/theme";
 import { type FlowCanvasNode, flowNodeTypes } from "./flow-node";
 import { type PickerAnchor, StepPicker } from "./step-picker";
 
@@ -151,6 +152,7 @@ function FlowCanvasInner({ definition, selectedNodeId, catalogue, connections, o
   const { screenToFlowPosition, fitView } = useReactFlow();
   const wrapper = useRef<HTMLDivElement>(null);
   const nodesInitialized = useNodesInitialized();
+  const { theme } = useTheme();
   /** Set only by a real gesture — `fitView` moves the viewport too, and that must not count. */
   const hasMoved = useRef(false);
 
@@ -313,10 +315,11 @@ function FlowCanvasInner({ definition, selectedNodeId, catalogue, connections, o
         fitView
         fitViewOptions={{ padding: canvas.fitViewPadding, maxZoom: canvas.fitViewMaxZoom }}
         proOptions={{ hideAttribution: false }}
-        // React Flow ships its own light and dark themes for the controls, edges and attribution.
-        // The app renders dark throughout (`<html class="dark">`), so it is told which to use rather
-        // than left on the light default, which is where the mismatched white panels came from.
-        colorMode="dark"
+        // React Flow paints its own pane, controls, edges and attribution from this rather than from
+        // our tokens, so it has to be told the theme — left on the default it stays light under a dark
+        // app, and pinned to dark it stays dark under a light one. `system` is a value it understands,
+        // so the app's three choices map straight onto it.
+        colorMode={theme}
         // Deletion is handled by the builder's own shortcut, which edits the definition. Leaving
         // React Flow's key binding on as well would delete the node from the canvas only.
         deleteKeyCode={null}
