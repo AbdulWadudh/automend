@@ -20,6 +20,10 @@ import { databaseUrl, setupDatabase, stubDefinition, type TestDatabase } from ".
  * and a retried job does not repeat a step's side effect. Both are decided by `ON CONFLICT` inside the
  * database precisely because a read-then-write in application code races with the retry it exists to stop —
  * so the tests fire callers *concurrently* rather than in sequence, which is the only version that proves it.
+ *
+ * One caveat when running these locally: the outbox relay is global by design — it has no tenant — so a
+ * worker running against the same database competes with the tests for rows and makes them flaky.
+ * `bun run verify` gives them a throwaway Postgres with nothing else attached, which is the version to trust.
  */
 
 const hasDatabase = databaseUrl() !== undefined;
