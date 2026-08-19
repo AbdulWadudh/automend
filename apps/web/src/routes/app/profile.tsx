@@ -98,7 +98,7 @@ function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl flex-1 space-y-8 overflow-y-auto px-6 py-10">
+    <div className="animate-in fade-in duration-200 mx-auto w-full max-w-3xl flex-1 space-y-8 overflow-y-auto px-6 py-10">
       <div className="space-y-1">
         <h1 className="font-semibold text-2xl tracking-tight">Profile</h1>
         <p className="text-muted-foreground">Your account, and how this app looks on this device.</p>

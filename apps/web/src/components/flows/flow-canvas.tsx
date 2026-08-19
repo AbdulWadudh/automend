@@ -267,7 +267,7 @@ function FlowCanvasInner({ definition, selectedNodeId, catalogue, connections, o
         minZoom={canvas.minZoom}
         maxZoom={canvas.maxZoom}
         fitView
-        fitViewOptions={{ padding: canvas.fitViewPadding }}
+        fitViewOptions={{ padding: canvas.fitViewPadding, maxZoom: canvas.fitViewMaxZoom }}
         proOptions={{ hideAttribution: false }}
         // React Flow ships its own light and dark themes for the controls, edges and attribution.
         // The app renders dark throughout (`<html class="dark">`), so it is told which to use rather

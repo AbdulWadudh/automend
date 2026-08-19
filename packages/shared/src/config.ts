@@ -667,9 +667,28 @@ export const config = {
       stepSpacing: { x: 0, y: 140 },
       /** Nudges a new node aside when the slot below the last one is already occupied. */
       collisionOffset: { x: 260, y: 0 },
+      /**
+       * The builder's draggable split. Strings because `react-resizable-panels` v4 reads a bare number
+       * as *pixels* and a unitless string as a percentage — a number here would be a 62px canvas.
+       */
+      layout: {
+        /** Uniquely names the saved layout, so the width somebody drags survives a reload. */
+        storageId: "automend.builder-layout",
+        canvasPercent: "62",
+        inspectorPercent: "38",
+        minCanvasPercent: "30",
+        minPanelPercent: "18",
+      },
       minZoom: 0.25,
       maxZoom: 2,
       fitViewPadding: 0.25,
+      /**
+       * How far `fitView` may zoom *in*, which is what decides the opening view.
+       *
+       * Without a ceiling a two-node flow fills the canvas, so the first thing you do on opening one is
+       * zoom out to see where there is room to build. Below 1 the graph opens with space around it.
+       */
+      fitViewMaxZoom: 1.2,
     },
   },
 

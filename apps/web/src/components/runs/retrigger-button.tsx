@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { LoaderCircleIcon, RotateCcwIcon } from "lucide-react";
 import { useRef } from "react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,7 +55,12 @@ export function RetriggerButton({ runId, status, retries, size = "sm", variant =
         queryClient.invalidateQueries({ queryKey: flowQueryKeys.all }),
       ]);
       await navigate({ to: routes.runDetail, params: { [runIdParam]: started.runId } });
+
+      toast.success(started.duplicate ? "That run was already started" : "Started a new run", {
+        description: started.duplicate ? "Opened the one it resolved to." : "Running with the same data as before.",
+      });
     },
+    onError: (error) => toast.error("Could not start it again", { description: error.message }),
   });
 
   if (!isTerminalRunStatus(status)) {

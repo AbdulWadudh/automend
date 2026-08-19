@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { webEnv } from "@/lib/env";
 
@@ -30,7 +31,7 @@ function RootLayout() {
   return (
     <TooltipProvider delayDuration={300}>
       <Outlet />
-
+      <Toaster />
       <Suspense fallback={null}>
         <RouterDevtools position="bottom-right" />
       </Suspense>

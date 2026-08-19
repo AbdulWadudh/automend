@@ -131,7 +131,7 @@ function RunDetailPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl flex-1 space-y-8 overflow-y-auto px-6 py-10">
+    <div className="animate-in fade-in duration-200 mx-auto w-full max-w-5xl flex-1 space-y-8 overflow-y-auto px-6 py-10">
       <Link
         to={routes.runs}
         className="inline-block rounded-sm text-muted-foreground text-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"

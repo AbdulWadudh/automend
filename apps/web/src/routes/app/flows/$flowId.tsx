@@ -10,6 +10,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckIcon, CircleAlertIcon, LoaderCircleIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useDefaultLayout } from "react-resizable-panels";
+import { toast } from "sonner";
 import { FlowCanvas } from "@/components/flows/flow-canvas";
 import { NodeInspector } from "@/components/flows/node-inspector";
 import { ShortcutsHelp } from "@/components/flows/shortcuts-help";
@@ -18,12 +20,20 @@ import { useFlowShortcuts } from "@/components/flows/use-flow-shortcuts";
 import { WebhookDrawer } from "@/components/flows/webhook-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { connectionQueryKeys, listConnections } from "@/lib/connections-api";
 import { duplicateStep, isTrigger, removeStep } from "@/lib/flow-editor";
 import { flowQueryKeys, getFlow, listDeliveries, updateFlow } from "@/lib/flows-api";
 import { fetchKitCatalogue, findTriggerSummary, kitQueryKeys } from "@/lib/kits-api";
 
 const { routes, flowIdParam } = config.webClient;
+const { layout } = config.flows.canvas;
+
+/** Local to this file, and stable: the saved layout is keyed by them. */
+const CANVAS_PANEL_ID = "canvas";
+const INSPECTOR_PANEL_ID = "inspector";
+const DRAWER_PANEL_ID = "webhook";
 const { flowName } = config.validation;
 
 /**
@@ -81,6 +91,20 @@ function SaveStatus({
 
 function FlowBuilder({ flow }: { flow: Flow }) {
   const queryClient = useQueryClient();
+  const isNarrow = useIsMobile();
+
+  /**
+   * The split, remembered.
+   *
+   * `panelIds` are listed because the drawer panel is conditional: without them a saved layout is
+   * restored against a different set of panels than it was written for, and the widths land on the
+   * wrong ones.
+   */
+  const savedLayout = useDefaultLayout({
+    id: layout.storageId,
+    panelIds: [CANVAS_PANEL_ID, INSPECTOR_PANEL_ID],
+    onlySaveAfterUserInteractions: true,
+  });
 
   const [name, setName] = useState(flow.name);
   const [definition, setDefinition] = useState<FlowDefinition>(flow.definition);
@@ -105,7 +129,9 @@ function FlowBuilder({ flow }: { flow: Flow }) {
       setSavedSnapshot(JSON.stringify({ name: updated.name, definition: updated.definition }));
       queryClient.setQueryData(flowQueryKeys.detail(flow.id), updated);
       await queryClient.invalidateQueries({ queryKey: flowQueryKeys.lists() });
+      toast.success("Flow saved");
     },
+    onError: (error) => toast.error("Could not save this flow", { description: error.message }),
   });
 
   /**
@@ -286,43 +312,111 @@ function FlowBuilder({ flow }: { flow: Flow }) {
         </p>
       )}
 
-      {/* Each child owns its own scrolling. Below `lg` the three stack and this column scrolls between them,
-          because a 26rem panel beside a canvas on a phone is not a layout. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
-        <div className="h-[60vh] flex-1 lg:h-auto lg:min-h-0">
-          <FlowCanvas
+      {/*
+        Two layouts, not one that adapts with CSS: a drag handle between a canvas and a 26rem panel is not a
+        thing on a phone, so below `lg` the panels stack and this column scrolls between them. `useIsMobile`
+        rather than a breakpoint class, because the two need different DOM.
+      */}
+      {isNarrow ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <div className="h-[60vh] flex-1">
+            <FlowCanvas
+              definition={definition}
+              selectedNodeId={selectedNodeId}
+              catalogue={catalogue}
+              connections={connections}
+              onChange={setDefinition}
+              onSelect={setSelectedNodeId}
+            />
+          </div>
+
+          <NodeInspector
+            flowId={flow.id}
+            variables={variables}
+            savedWebhookPath={savedWebhookPath}
             definition={definition}
             selectedNodeId={selectedNodeId}
             catalogue={catalogue}
+            catalogueError={catalogueQuery.error}
             connections={connections}
+            onRetryCatalogue={() => void catalogueQuery.refetch()}
             onChange={setDefinition}
             onSelect={setSelectedNodeId}
           />
+
+          {draftWebhookPath !== undefined && (
+            <WebhookDrawer
+              flowId={flow.id}
+              savedPath={savedWebhookPath}
+              open={isTestingWebhook}
+              onOpenChange={setIsTestingWebhook}
+            />
+          )}
         </div>
+      ) : (
+        <ResizablePanelGroup
+          orientation="horizontal"
+          defaultLayout={savedLayout.defaultLayout}
+          onLayoutChanged={savedLayout.onLayoutChanged}
+          className="flex min-h-0 flex-1 overflow-hidden"
+        >
+          <ResizablePanel id={CANVAS_PANEL_ID} defaultSize={layout.canvasPercent} minSize={layout.minCanvasPercent}>
+            <FlowCanvas
+              definition={definition}
+              selectedNodeId={selectedNodeId}
+              catalogue={catalogue}
+              connections={connections}
+              onChange={setDefinition}
+              onSelect={setSelectedNodeId}
+            />
+          </ResizablePanel>
 
-        <NodeInspector
-          flowId={flow.id}
-          variables={variables}
-          savedWebhookPath={savedWebhookPath}
-          definition={definition}
-          selectedNodeId={selectedNodeId}
-          catalogue={catalogue}
-          catalogueError={catalogueQuery.error}
-          connections={connections}
-          onRetryCatalogue={() => void catalogueQuery.refetch()}
-          onChange={setDefinition}
-          onSelect={setSelectedNodeId}
-        />
+          <ResizableHandle withHandle />
 
-        {draftWebhookPath !== undefined && (
-          <WebhookDrawer
-            flowId={flow.id}
-            savedPath={savedWebhookPath}
-            open={isTestingWebhook}
-            onOpenChange={setIsTestingWebhook}
-          />
-        )}
-      </div>
+          <ResizablePanel
+            id={INSPECTOR_PANEL_ID}
+            defaultSize={layout.inspectorPercent}
+            minSize={layout.minPanelPercent}
+          >
+            {/* `lg:w-full` overrides the fixed width the panel sets for the stacked layout — here the
+                panel group owns the width, and a fixed one would fight the drag. */}
+            <NodeInspector
+              className="lg:w-full xl:w-full"
+              flowId={flow.id}
+              variables={variables}
+              savedWebhookPath={savedWebhookPath}
+              definition={definition}
+              selectedNodeId={selectedNodeId}
+              catalogue={catalogue}
+              catalogueError={catalogueQuery.error}
+              connections={connections}
+              onRetryCatalogue={() => void catalogueQuery.refetch()}
+              onChange={setDefinition}
+              onSelect={setSelectedNodeId}
+            />
+          </ResizablePanel>
+
+          {draftWebhookPath !== undefined && isTestingWebhook && (
+            <>
+              <ResizableHandle withHandle />
+
+              <ResizablePanel
+                id={DRAWER_PANEL_ID}
+                defaultSize={layout.minPanelPercent}
+                minSize={layout.minPanelPercent}
+              >
+                <WebhookDrawer
+                  className="lg:w-full xl:w-full"
+                  flowId={flow.id}
+                  savedPath={savedWebhookPath}
+                  open={isTestingWebhook}
+                  onOpenChange={setIsTestingWebhook}
+                />
+              </ResizablePanel>
+            </>
+          )}
+        </ResizablePanelGroup>
+      )}
     </div>
   );
 }

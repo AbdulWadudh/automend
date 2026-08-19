@@ -7,6 +7,7 @@ import { IconAction } from "@/components/ui/icon-action";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { flowQueryKeys, listDeliveries } from "@/lib/flows-api";
+import { cn } from "@/lib/utils";
 
 const dateTimeFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "medium" });
 
@@ -48,6 +49,8 @@ function DeliveryEntry({ delivery }: { delivery: FlowDelivery }) {
 }
 
 export type WebhookDrawerProps = {
+  /** Lets a resizable panel drop the fixed desktop width this sets for the stacked layout. */
+  className?: string;
   flowId: string;
   /**
    * The path as *stored*, not as edited.
@@ -68,7 +71,7 @@ export type WebhookDrawerProps = {
  * here is the payload whose field names become the variables the steps below can use. Testing the
  * hook and discovering the data are the same act.
  */
-export function WebhookDrawer({ flowId, savedPath, open, onOpenChange }: WebhookDrawerProps) {
+export function WebhookDrawer({ className, flowId, savedPath, open, onOpenChange }: WebhookDrawerProps) {
   const queryClient = useQueryClient();
   const [method, setMethod] = useState<string>("POST");
   const [body, setBody] = useState(SAMPLE_BODY);
@@ -107,7 +110,10 @@ export function WebhookDrawer({ flowId, savedPath, open, onOpenChange }: Webhook
       aria-label="Test this webhook"
       // `lg:min-h-0` alongside `lg:h-full`: without it this flex child will not shrink below its content, so the
       // inner `overflow-y-auto` has nothing to overflow within and the page scrolls instead of the drawer.
-      className="flex w-full shrink-0 flex-col border-t bg-card/40 lg:h-full lg:min-h-0 lg:w-[26rem] lg:border-t-0 lg:border-l xl:w-[30rem]"
+      className={cn(
+        "flex w-full shrink-0 flex-col border-t bg-card/40 lg:h-full lg:min-h-0 lg:w-[26rem] lg:border-t-0 lg:border-l xl:w-[30rem]",
+        className,
+      )}
     >
       <header className="flex items-center gap-2 border-b px-5 py-4">
         <div className="min-w-0 flex-1 space-y-1">

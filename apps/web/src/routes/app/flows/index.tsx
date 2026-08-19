@@ -2,6 +2,7 @@ import { config, type Flow } from "@automend/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,10 +25,12 @@ function NewFlowForm() {
 
   const create = useMutation({
     mutationFn: () => createFlow({ name: name.trim() }),
-    onSuccess: async () => {
+    onSuccess: async (created) => {
       setName("");
       await queryClient.invalidateQueries({ queryKey: flowQueryKeys.lists() });
+      toast.success(`Created "${created.name}"`);
     },
+    onError: (error) => toast.error("Could not create the flow", { description: error.message }),
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -69,7 +72,9 @@ function FlowCard({ flow }: { flow: Flow }) {
     mutationFn: () => deleteFlow(flow.id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: flowQueryKeys.lists() });
+      toast.success(`Deleted "${flow.name}"`);
     },
+    onError: (error) => toast.error("Could not delete the flow", { description: error.message }),
   });
 
   return (
@@ -124,7 +129,7 @@ function FlowsPage() {
   });
 
   return (
-    <div className="mx-auto w-full max-w-5xl flex-1 space-y-8 overflow-y-auto px-6 py-10">
+    <div className="animate-in fade-in duration-200 mx-auto w-full max-w-5xl flex-1 space-y-8 overflow-y-auto px-6 py-10">
       <div className="space-y-1">
         <h1 className="font-semibold text-2xl tracking-tight">Flows</h1>
         <p className="text-muted-foreground">Everything in this workspace. Open one to edit it on the canvas.</p>

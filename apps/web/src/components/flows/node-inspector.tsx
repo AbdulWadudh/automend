@@ -41,6 +41,7 @@ import {
   listUsableConnections,
   pickDefaultConnection,
 } from "@/lib/kits-api";
+import { cn } from "@/lib/utils";
 import { PropertyFields } from "./property-field";
 
 const { validation } = config;
@@ -277,6 +278,8 @@ function ConnectionField({
 }
 
 export type NodeInspectorProps = {
+  /** Lets a resizable panel drop the fixed desktop width this sets for the stacked layout. */
+  className?: string;
   /** Needed for the webhook URL, which is built from the flow this node belongs to. */
   flowId: string;
   /** Derived from the last delivery, so a step offers the fields the flow actually receives. */
@@ -305,9 +308,9 @@ export type NodeInspectorProps = {
 const PANEL_CLASS =
   "flex w-full shrink-0 flex-col border-t bg-card/40 lg:h-full lg:min-h-0 lg:w-[26rem] lg:border-t-0 lg:border-l xl:w-[30rem]";
 
-function Panel({ children }: { children: ReactNode }) {
+function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <aside className={PANEL_CLASS} aria-label="Node settings">
+    <aside className={cn(PANEL_CLASS, className)} aria-label="Node settings">
       {children}
     </aside>
   );
@@ -324,6 +327,7 @@ function Panel({ children }: { children: ReactNode }) {
  * a slow first load, an API that is down, and a deployment with no kits configured.
  */
 export function NodeInspector({
+  className,
   flowId,
   variables,
   savedWebhookPath,
@@ -343,7 +347,7 @@ export function NodeInspector({
 
   if (!node || !selectedNodeId) {
     return (
-      <Panel>
+      <Panel className={className}>
         <div className="space-y-3 p-6 text-sm">
           <p className="font-medium text-foreground">Nothing selected</p>
           <p className="text-muted-foreground text-xs leading-relaxed">
@@ -357,7 +361,7 @@ export function NodeInspector({
 
   if (catalogueError) {
     return (
-      <Panel>
+      <Panel className={className}>
         <div className="space-y-3 p-6 text-sm">
           <p className="font-medium text-foreground">Settings are unavailable</p>
           <p className="text-muted-foreground text-xs leading-relaxed">
@@ -375,7 +379,7 @@ export function NodeInspector({
 
   if (!catalogue) {
     return (
-      <Panel>
+      <Panel className={className}>
         {/* Skeletons rather than a spinner: the shape of what is coming, so the panel does not jump when it
             arrives. Announced politely so a screen reader is told the wait exists. */}
         <div className="space-y-5 p-6" aria-live="polite" aria-busy="true">
@@ -393,7 +397,7 @@ export function NodeInspector({
 
   if (catalogue.length === 0) {
     return (
-      <Panel>
+      <Panel className={className}>
         <div className="space-y-3 p-6 text-sm">
           <p className="font-medium text-foreground">No services are configured</p>
           <p className="text-muted-foreground text-xs leading-relaxed">
@@ -407,7 +411,7 @@ export function NodeInspector({
   const nodeIsTrigger = isTrigger(definition, selectedNodeId);
 
   return (
-    <Panel>
+    <Panel className={className}>
       <header className="space-y-1 border-b px-5 py-4">
         <h2 className="font-medium text-sm">{nodeIsTrigger ? "Trigger" : "Step"}</h2>
         <p className="text-muted-foreground text-xs">

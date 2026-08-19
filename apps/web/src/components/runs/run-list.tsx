@@ -36,7 +36,7 @@ function RunRow({ run }: { run: RunListItem }) {
   const retryLabel = describeRetries(run.retries);
 
   return (
-    <li className="flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 ring-1 ring-foreground/10 transition-colors hover:bg-muted/30">
+    <li className="flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 ring-1 ring-foreground/10 transition hover:-translate-y-px hover:bg-muted/30">
       <Link
         to={routes.runDetail}
         params={{ [runIdParam]: run.id }}
