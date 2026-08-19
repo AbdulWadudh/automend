@@ -113,13 +113,13 @@ export function RunTimeline({ run }: { run: FlowRunDetail }) {
               {!isLast && <span className="w-px flex-1 bg-border" />}
             </div>
 
-            <div className={cn("min-w-0 flex-1 space-y-2", isLast ? "pb-1" : "pb-6")}>
+            <div className={cn("min-w-0 flex-1 space-y-2", isLast ? "pb-1" : "pb-5 sm:pb-6")}>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <Icon className={cn("size-3.5 shrink-0 text-muted-foreground", entry.tone.isBusy && "animate-spin")} />
                 <span className="font-medium text-sm">{entry.title}</span>
                 <StatusChip tone={entry.tone} />
 
-                <span className="ml-auto flex items-center gap-2 text-muted-foreground text-xs tabular-nums">
+                <span className="flex w-full items-center gap-2 text-muted-foreground text-xs tabular-nums sm:ml-auto sm:w-auto">
                   {entry.at && <time dateTime={entry.at}>{formatTimeOfDay(entry.at)}</time>}
                   {offset && <span>{offset}</span>}
                   {entry.durationMs !== null && <span>took {formatDurationMs(entry.durationMs)}</span>}

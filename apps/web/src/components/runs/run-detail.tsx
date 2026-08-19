@@ -32,9 +32,9 @@ function RunHeader({ run, headingClass }: { run: FlowRunDetail; headingClass: st
   const failedSteps = run.steps.filter((step) => step.status === "failed").length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 space-y-1.5">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+        <div className="min-w-0 space-y-1 sm:space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip tone={RUN_STATUS_TONES[run.status]} />
             {run.retryOfRunId && (
@@ -69,7 +69,7 @@ function RunHeader({ run, headingClass }: { run: FlowRunDetail; headingClass: st
         <RetriggerButton runId={run.id} status={run.status} retries={run.retries} />
       </div>
 
-      <dl className="grid grid-cols-2 gap-4 rounded-xl bg-muted/30 px-4 py-3 ring-1 ring-foreground/10 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-muted/30 px-3 py-2.5 ring-1 ring-foreground/10 sm:grid-cols-4 sm:gap-4 sm:px-4 sm:py-3">
         <Fact label="Received" value={formatDateTime(run.createdAt)} />
         <Fact label="Finished" value={run.finishedAt ? formatDateTime(run.finishedAt) : "—"} />
         <Fact label="Total time" value={durationMs === null ? "not started" : formatDurationMs(durationMs)} />
@@ -107,7 +107,7 @@ function RunHeader({ run, headingClass }: { run: FlowRunDetail; headingClass: st
 export function RunDetail({
   runId,
   className,
-  headingClass = "truncate font-semibold text-2xl tracking-tight",
+  headingClass = "truncate font-semibold text-xl tracking-tight sm:text-2xl",
 }: {
   runId: string;
   /** Where this panel's height comes from: bounded by the caller, the timeline scrolls; unbounded, it does not. */
@@ -153,14 +153,14 @@ export function RunDetail({
       {/* What the run *is* stays put. Only the timeline below it grows, so only the timeline scrolls —
           scrolling to a later step must not carry the status, the ids and the failure off the screen you
           are reading the step against. */}
-      <div className="shrink-0 pb-8">
+      <div className="shrink-0 pb-5 sm:pb-8">
         <RunHeader run={run.data} headingClass={headingClass} />
       </div>
 
       <section className="flex min-h-0 flex-1 flex-col">
-        <h2 className="shrink-0 border-b pb-4 font-semibold text-lg tracking-tight">Timeline</h2>
+        <h2 className="shrink-0 border-b pb-3 font-semibold text-lg tracking-tight sm:pb-4">Timeline</h2>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-5 pb-1">
+        <div className="min-h-0 flex-1 overflow-y-auto px-1 pt-4 pb-1 sm:px-3 sm:pt-5">
           <RunTimeline run={run.data} />
         </div>
       </section>

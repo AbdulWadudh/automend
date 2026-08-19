@@ -37,7 +37,7 @@ function RunRow({ run, isOpen, onOpen }: { run: RunListItem; isOpen: boolean; on
   return (
     <li
       className={cn(
-        "relative flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 ring-1 transition hover:-translate-y-px hover:bg-muted/30",
+        "relative flex flex-col items-stretch gap-2 rounded-xl px-4 py-3 ring-1 transition hover:-translate-y-px hover:bg-muted/30 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3",
         isOpen ? "bg-muted/40 ring-ring" : "ring-foreground/10",
       )}
     >
@@ -47,11 +47,11 @@ function RunRow({ run, isOpen, onOpen }: { run: RunListItem; isOpen: boolean; on
       <button
         type="button"
         onClick={() => onOpen(run.id)}
-        className="min-w-0 flex-1 space-y-1 rounded-sm text-left after:absolute after:inset-0 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+        className="w-full min-w-0 space-y-1 rounded-sm text-left after:absolute after:inset-0 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 sm:w-auto sm:flex-1"
       >
         <span className="flex flex-wrap items-center gap-2">
           <StatusChip tone={RUN_STATUS_TONES[run.status]} />
-          <span className="truncate font-medium text-sm">{run.flowName}</span>
+          <span className="min-w-0 break-words font-medium text-sm sm:truncate">{run.flowName}</span>
           {run.retryOfRunId && (
             <Badge variant="outline" className="text-muted-foreground">
               <RotateCcwIcon className="size-3" />A retry
@@ -72,7 +72,7 @@ function RunRow({ run, isOpen, onOpen }: { run: RunListItem; isOpen: boolean; on
       </button>
 
       {/* Above the stretched button, or they would be unreachable beneath it. */}
-      <span className="relative z-10 flex items-center gap-3">
+      <span className="relative z-10 flex items-center justify-between gap-3 sm:justify-end">
         <CopyableId label="Run" value={run.id} short />
 
         <RetriggerButton runId={run.id} status={run.status} retries={run.retries} size="xs" variant="ghost" />
