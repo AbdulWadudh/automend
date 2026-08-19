@@ -19,6 +19,30 @@
     />
     <meta name="twitter:card" content="summary_large_image" />
     <title>Automend — self-hosted AI workflow automation</title>
+    <!--
+      The stored theme, applied before first paint.
+
+      Inline and before the bundle on purpose: a theme applied from React arrives a frame late, which is a
+      visible flash of the wrong colours on every load. `class="dark"` above is the fallback for a browser
+      that never runs this.
+
+      The key and the class mirror `config.webClient.theme`; `tests/theme.test.ts` fails if they drift.
+    -->
+    <script>
+      (() => {
+        let stored = "system";
+
+        try {
+          stored = localStorage.getItem("automend.theme") || "system";
+        } catch {
+          /* Blocked storage keeps the default rather than failing to render. */
+        }
+
+        const dark = stored === "dark" || (stored === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+
+        document.documentElement.classList.toggle("dark", dark);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

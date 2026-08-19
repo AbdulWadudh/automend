@@ -20,6 +20,7 @@ import { Route as MarketingTosRouteImport } from './routes/_marketing.tos'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppConnectionsRouteImport } from './routes/app/connections'
 import { Route as AppOperationsRouteImport } from './routes/app/operations'
+import { Route as AppProfileRouteImport } from './routes/app/profile'
 import { Route as AppFlowsIndexRouteImport } from './routes/app/flows/index'
 import { Route as AppFlowsFlowIdRouteImport } from './routes/app/flows/$flowId'
 import { Route as AppRunsIndexRouteImport } from './routes/app/runs/index'
@@ -79,6 +80,11 @@ const AppOperationsRoute = AppOperationsRouteImport.update({
   path: '/operations',
   getParentRoute: () => AppRoute,
 } as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppFlowsIndexRoute = AppFlowsIndexRouteImport.update({
   id: '/flows/',
   path: '/flows/',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/tos': typeof MarketingTosRoute
   '/app/connections': typeof AppConnectionsRoute
   '/app/operations': typeof AppOperationsRoute
+  '/app/profile': typeof AppProfileRoute
   '/app/': typeof AppIndexRoute
   '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
   '/app/runs/$runId': typeof AppRunsRunIdRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/tos': typeof MarketingTosRoute
   '/app/connections': typeof AppConnectionsRoute
   '/app/operations': typeof AppOperationsRoute
+  '/app/profile': typeof AppProfileRoute
   '/': typeof MarketingIndexRoute
   '/app': typeof AppIndexRoute
   '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
@@ -142,6 +150,7 @@ export interface FileRoutesById {
   '/_marketing/tos': typeof MarketingTosRoute
   '/app/connections': typeof AppConnectionsRoute
   '/app/operations': typeof AppOperationsRoute
+  '/app/profile': typeof AppProfileRoute
   '/_marketing/': typeof MarketingIndexRoute
   '/app/': typeof AppIndexRoute
   '/app/flows/$flowId': typeof AppFlowsFlowIdRoute
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/tos'
     | '/app/connections'
     | '/app/operations'
+    | '/app/profile'
     | '/app/'
     | '/app/flows/$flowId'
     | '/app/runs/$runId'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/tos'
     | '/app/connections'
     | '/app/operations'
+    | '/app/profile'
     | '/'
     | '/app'
     | '/app/flows/$flowId'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '/_marketing/tos'
     | '/app/connections'
     | '/app/operations'
+    | '/app/profile'
     | '/_marketing/'
     | '/app/'
     | '/app/flows/$flowId'
@@ -286,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOperationsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/profile': {
+      id: '/app/profile'
+      path: '/profile'
+      fullPath: '/app/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/flows/': {
       id: '/app/flows/'
       path: '/flows'
@@ -338,6 +357,7 @@ const MarketingRouteWithChildren = MarketingRoute._addFileChildren(
 interface AppRouteChildren {
   AppConnectionsRoute: typeof AppConnectionsRoute
   AppOperationsRoute: typeof AppOperationsRoute
+  AppProfileRoute: typeof AppProfileRoute
   AppIndexRoute: typeof AppIndexRoute
   AppFlowsFlowIdRoute: typeof AppFlowsFlowIdRoute
   AppRunsRunIdRoute: typeof AppRunsRunIdRoute
@@ -348,6 +368,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppConnectionsRoute: AppConnectionsRoute,
   AppOperationsRoute: AppOperationsRoute,
+  AppProfileRoute: AppProfileRoute,
   AppIndexRoute: AppIndexRoute,
   AppFlowsFlowIdRoute: AppFlowsFlowIdRoute,
   AppRunsRunIdRoute: AppRunsRunIdRoute,

@@ -1173,6 +1173,7 @@ export const config = {
       runs: APP_RUNS_ROUTE,
       runDetail: `${APP_RUNS_ROUTE}/$${RUN_ID_PARAM}`,
       connections: `${APP_ROUTE}/connections`,
+      profile: `${APP_ROUTE}/profile`,
       operations: `${APP_ROUTE}/operations`,
     },
     /** The parameter names in `flowDetail` and `runDetail`, so `useParams()` and the link cannot disagree. */
@@ -1189,6 +1190,20 @@ export const config = {
       features: "features",
       selfHosting: "self-hosting",
       faq: "faq",
+    },
+    /**
+     * Appearance. `system` follows the operating system and keeps following it, so a laptop that
+     * switches at sunset switches the app with it.
+     *
+     * The class is what Tailwind's `dark` variant reads, and `index.html` applies the stored choice
+     * before first paint — a theme applied from React arrives one frame late, which is a flash of the
+     * wrong colours on every load.
+     */
+    theme: {
+      options: ["system", "light", "dark"],
+      defaultOption: "system",
+      storageKey: "automend.theme",
+      darkClass: "dark",
     },
     defaultApiBasePath: API_BASE_PATH,
     queryStaleTimeMs: 10_000,

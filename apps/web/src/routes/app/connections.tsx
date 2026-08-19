@@ -8,11 +8,11 @@ import {
   EyeOffIcon,
   KeyRoundIcon,
   PencilIcon,
-  PlugZapIcon,
   RefreshCwIcon,
   Trash2Icon,
 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
+import { ProviderIcon } from "@/components/connections/provider-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -81,7 +81,7 @@ function ConnectorCard({ connector, connectedCount }: { connector: ConnectorCata
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          {connector.kind === "token" ? <KeyRoundIcon className="size-4" /> : <PlugZapIcon className="size-4" />}
+          <ProviderIcon providerId={connector.id} label={connector.label} />
           {connector.label}
         </CardTitle>
         <CardDescription>{connector.summary}</CardDescription>
