@@ -1,16 +1,16 @@
-# Automend — single-stack deployment for Coolify.
+# Automend ΓÇö single-stack deployment for Coolify.
 #
 # One resource deploys everything: Postgres, Redis (Dragonfly), the migration runner, the API, the
-# worker and the web app. SigNoz is deliberately *not* here — it is its own Coolify resource with
+# worker and the web app. SigNoz is deliberately *not* here ΓÇö it is its own Coolify resource with
 # its own lifecycle, and this stack only needs its collector URL.
 #
 # This is NOT the repo-root docker-compose.yml. That one is local development only and publishes
 # ports on the host; this one keeps everything on the stack's private network and exposes exactly
 # one thing to the internet: the web app.
 #
-# Coolify treats this file as the source of truth — set values here, not in the UI.
+# Coolify treats this file as the source of truth ΓÇö set values here, not in the UI.
 #
-# Deploy: New Resource → Docker Compose → this file, with the repo as the source.
+# Deploy: New Resource ΓåÆ Docker Compose ΓåÆ this file, with the repo as the source.
 
 services:
   postgres:
@@ -23,7 +23,7 @@ services:
     volumes:
       # Postgres 18 moved PGDATA to /var/lib/postgresql/<major>/docker and declares the *parent*
       # as its volume. Mounting the old .../data path here would put the database outside the
-      # volume — everything works until the container is recreated, then the data is gone.
+      # volume ΓÇö everything works until the container is recreated, then the data is gone.
       - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -37,7 +37,7 @@ services:
     restart: unless-stopped
     command:
       # Not optional. BullMQ's Lua scripts access keys they do not declare, which Dragonfly refuses
-      # by default — every health check stays green while job processing fails completely.
+      # by default ΓÇö every health check stays green while job processing fails completely.
       # Queue names are brace-wrapped ({flow-executions}) to give it a hashtag to lock on; both
       # halves are required together.
       - "--cluster_mode=emulated"
@@ -81,18 +81,18 @@ services:
       API_PORT: 3000
       DATABASE_URL: postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-automend}
       REDIS_URL: redis://:${SERVICE_PASSWORD_REDIS}@redis:6379/0
-      # The public address of the web app, and the only origin that makes a cross-origin call —
+      # The public address of the web app, and the only origin that makes a cross-origin call ΓÇö
       # the browser reaches the API through the web app's own domain.
       #
       # Set by hand, to the same domain assigned to the `web` service below. Coolify consumes
       # SERVICE_FQDN_WEB_8080 while it builds the proxy route and never passes it back to a
       # container, so referencing it here resolves to an empty string, which the API rejects at
-      # startup — a crash loop that a deploy only reports as "container api is unhealthy".
+      # startup ΓÇö a crash loop that a deploy only reports as "container api is unhealthy".
       WEB_ORIGIN: "${PUBLIC_WEB_URL:?set this to the web app's own address, e.g. https://automend.example.com}"
       # Signs session cookies and encrypts stored OAuth tokens. Coolify generates one on first
       # deploy and keeps it; rotating it signs every user out.
       AUTH_SECRET: ${SERVICE_PASSWORD_64_AUTH}
-      # OAuth providers redirect the *browser* back, so this is the public web address — never the
+      # OAuth providers redirect the *browser* back, so this is the public web address ΓÇö never the
       # API's in-network one.
       AUTH_BASE_URL: "${PUBLIC_WEB_URL:?set this to the web app's own address, e.g. https://automend.example.com}"
       # Optional. Both must be set for "Continue with Google" to appear; the redirect URI to
@@ -117,13 +117,13 @@ services:
       # onward the same way it proxies /api.
       #
       # This is an administrative credential, not a user one. The queue holds every workspace's job
-      # payloads, and the dashboard can enqueue work the worker will run — so treat it like
+      # payloads, and the dashboard can enqueue work the worker will run ΓÇö so treat it like
       # SECRETS_KEY, and put Coolify's IP allowlist or its own Basic Auth in front of the domain if
       # the stack is on the open internet.
       OPS_DASHBOARD_USER: ${OPS_DASHBOARD_USER:-}
       OPS_DASHBOARD_PASSWORD: ${OPS_DASHBOARD_PASSWORD:-}
       # The studio's public address as the *browser* sees it, which is the domain Coolify generated for
-      # the `studio` service below — read it off that service and paste it here. Left unset, the
+      # the `studio` service below ΓÇö read it off that service and paste it here. Left unset, the
       # Operations page reports the studio as unavailable rather than linking somewhere unreachable.
       STUDIO_URL: ${STUDIO_URL:-}
       OTEL_LOGS_ENABLED: ${OTEL_LOGS_ENABLED:-true}
@@ -149,7 +149,7 @@ services:
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}
       DATABASE_URL: postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-automend}
       REDIS_URL: redis://:${SERVICE_PASSWORD_REDIS}@redis:6379/0
-      # The engine resolves each step's credentials itself, so the worker needs the same auth values as the api —
+      # The engine resolves each step's credentials itself, so the worker needs the same auth values as the api ΓÇö
       # the same values, not copies. Given different ones it would refresh nothing and decrypt nothing.
       AUTH_SECRET: ${SERVICE_PASSWORD_64_AUTH}
       SECRETS_KEY: "${SECRETS_KEY:?generate one with openssl rand -base64 32}"
@@ -182,10 +182,12 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
+    expose:
+      - "8080"
     environment:
       # Declares this stack's one public route: Coolify reads the key, generates a domain for the
       # `web` service and proxies it to port 8080. The value is the *path* to serve from, not a
-      # URL, and the variable itself never reaches a container — everything that needs the public
+      # URL, and the variable itself never reaches a container ΓÇö everything that needs the public
       # address reads PUBLIC_WEB_URL instead.
       SERVICE_FQDN_WEB_8080: /
       NODE_ENV: production
@@ -216,6 +218,8 @@ services:
   studio:
     image: ghcr.io/drizzle-team/gateway:1.4.1
     restart: unless-stopped
+    expose:
+      - "4983"
     environment:
       # Its own domain, not a path under the web app's: Gateway serves its assets from the root of
       # whatever origin it is on, so it cannot be proxied under a prefix the way /ops/queues is.
