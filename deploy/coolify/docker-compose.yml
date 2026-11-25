@@ -30,6 +30,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 20
+    # Also joined to Coolify's shared network so the central Drizzle Studio (db-studio.k79.quest)
+    # can browse this database without a published port. The alias is explicit because the plain
+    # `postgres` name is already taken on that network by another stack. Reaching it still needs
+    # this database's own credentials; nothing is exposed to the host or the internet.
+    networks:
+      default:
+      coolify:
+        aliases:
+          - automend-postgres
 
   # Named `redis` because that is the interface the apps code against; the image is DragonflyDB.
   redis:
@@ -239,3 +248,9 @@ volumes:
   postgres-data:
   redis-data:
   studio-data:
+
+networks:
+  # Coolify's destination network: the one its proxy and every "Connect To Predefined Network"
+  # resource already sit on. Declared here so postgres can join it under the alias above.
+  coolify:
+    external: true
