@@ -343,15 +343,24 @@ The dashboard's own asset URLs are relative to the path it is mounted at, which 
 proxy forwards the prefix **verbatim** while the `/otlp` proxy strips its own. Stripping it here
 serves the page and then 404s every script the page asks for.
 
-### Database studio — its own origin
+### Database studio - not part of the server stack
 
-[Drizzle Gateway](https://gateway.drizzle.team) — Drizzle Studio packaged to be self-hosted. It runs
+[Drizzle Gateway](https://gateway.drizzle.team) - Drizzle Studio packaged to be self-hosted. It runs
 as a container rather than as `drizzle-kit studio`, because that command serves its data to a *hosted*
 front-end at `local.drizzle.studio` over a connection to `127.0.0.1`: a laptop tool that depends on a
 third party being up, and there is no terminal on the deployed server to run it from anyway.
 
+**The deployed stack runs no studio of its own.** One shared Gateway serves every deployment and
+reaches each database over Coolify's shared network; this stack's Postgres joins that network under
+the alias `automend-postgres` for exactly that reason, and still accepts only its own credentials.
+Set `STUDIO_URL` to the shared studio's address so the Operations page links to it; left unset, the
+page reports the studio as unavailable rather than linking somewhere unreachable. A second console
+would only mean a second public domain and a second credential to guard.
+
+Local development keeps one, on `http://localhost:4983`:
+
 ```bash
-docker compose up studio     # http://localhost:4983
+docker compose up studio
 ```
 
 Sign in with `STUDIO_PASSWORD` from your `.env`, then add a connection in its UI: paste the value of
@@ -360,14 +369,12 @@ The connection is saved in the `studio-data` volume, which is why `STORE_PATH` a
 point have to agree; `packages/shared/tests/compose.test.ts` fails if they drift.
 
 > **Never leave `STUDIO_PASSWORD` blank.** Gateway's login handler is `if (!MASTERPASS) return
-> success` — with no master password it still renders a password box and **accepts anything typed
+> success` - with no master password it still renders a password box and **accepts anything typed
 > into it**, so the studio reads as protected while being wide open. `.env.example` ships a local
-> throwaway value for that reason, and both compose files refuse to start without one.
+> throwaway value for that reason, and the local compose file refuses to start without one.
 
-The studio is **not** proxied under a prefix of the web app the way the queue dashboard is: Gateway
-serves its assets from the root of whatever origin it is on. In the Coolify stack it therefore gets a
-domain of its own — set `STUDIO_URL` to that domain so the Operations page can link to it, and layer
-an IP allowlist on it unless the stack is private. Changing `STUDIO_PASSWORD` needs
+Gateway serves its assets from the root of whatever origin it is on, so it cannot be proxied under a
+path prefix the way `/ops/queues` is. Changing `STUDIO_PASSWORD` needs
 `docker compose up -d --force-recreate studio`; a running container keeps the value it started with.
 
 For a database *outside* the compose stack there is still

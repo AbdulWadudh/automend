@@ -102,13 +102,13 @@ describe("docker-compose environment", () => {
 
 describe("the database studio", () => {
   /**
-   * Both compose files declare it, and both hand it the same STORE_PATH — the value is written
-   * literally in each, because Coolify rejects `${VAR}` in a volume target.
+   * Only the local development stack declares one. The server does not: a single shared Drizzle
+   * Gateway serves every deployment, so a studio in this stack would mean a second console, a second
+   * public domain and a second credential to guard.
+   *
+   * STORE_PATH is written literally, because Coolify rejects `${VAR}` in a volume target.
    */
-  for (const [label, text] of [
-    ["docker-compose.yml", composeText],
-    ["deploy/coolify/docker-compose.yml", coolifyComposeText],
-  ] as const) {
+  for (const [label, text] of [["docker-compose.yml", composeText]] as const) {
     test(`${label} declares the studio service`, () => {
       expect(text).toContain(`${config.ops.databaseStudio.serviceName}:`);
     });
@@ -123,15 +123,9 @@ describe("the database studio", () => {
     });
   }
 
-  test("the coolify stack writes the studio image tag that config declares", () => {
-    // The root file substitutes ${STUDIO_IMAGE} from the generated .env; the coolify file has no .env
-    // to read and writes the tag literally, so this is the only thing stopping the two drifting.
-    expect(coolifyComposeText).toContain(config.ops.databaseStudio.image);
-  });
-
-  test("the coolify stack requires the studio's password rather than defaulting it", () => {
-    // `:-` would deploy an unprotected console; `:?` stops the deploy instead.
-    expect(/MASTERPASS: "\$\{STUDIO_PASSWORD:\?/.test(coolifyComposeText)).toBe(true);
+  test("the coolify stack deploys no studio of its own", () => {
+    expect(coolifyComposeText).not.toContain(`${config.ops.databaseStudio.serviceName}:`);
+    expect(coolifyComposeText).not.toContain("MASTERPASS:");
   });
 });
 
@@ -171,12 +165,14 @@ describe("coolify magic variables", () => {
     expect(coolifyComposeText).toContain("SERVICE_FQDN_WEB_8080: /");
   });
 
-  test("the studio declares a domain of its own, on its own port", () => {
-    // It cannot be proxied under a prefix of the web app the way /ops/queues is: Gateway serves its
-    // assets from the root of whatever origin it is on. So it needs a route of its own or it is
-    // deployed and unreachable.
-    const serviceName = config.ops.databaseStudio.serviceName.toUpperCase();
+  test("no other service asks Coolify for a domain", () => {
+    // The web app is the stack's one public route; the studio that used to have a second one now
+    // lives outside this stack.
+    const declared = coolifyComposeText
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .filter((line) => /^\s*SERVICE_FQDN_/.test(line));
 
-    expect(coolifyComposeText).toContain(`SERVICE_FQDN_${serviceName}_${config.ops.databaseStudio.containerPort}: /`);
+    expect(declared).toEqual(["      SERVICE_FQDN_WEB_8080: /"]);
   });
 });
